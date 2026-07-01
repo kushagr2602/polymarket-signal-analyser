@@ -4,6 +4,8 @@ Scans [Polymarket](https://polymarket.com) prediction markets, filters them for
 relevance to BIT Capital's tech-equity portfolio with an LLM, stores the signals
 in Postgres (Supabase), and serves them through a Streamlit UI.
 
+> **Deploy to a stable HTTPS URL:** see [DEPLOY.md](DEPLOY.md) (Streamlit Cloud + GitHub Actions, ~10 min).
+
 ## What it does
 
 ```
