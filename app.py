@@ -1,8 +1,18 @@
+import os
 from datetime import datetime, timezone
 
 import pandas as pd
 import plotly.graph_objects as go
 import streamlit as st
+
+# On Streamlit Cloud secrets live in st.secrets, not env vars; mirror them so the
+# env-based src modules work unchanged. Locally (.env) this is a harmless no-op.
+try:
+    for _k in ("SUPABASE_URL", "SUPABASE_KEY", "OPENAI_API_KEY"):
+        if _k in st.secrets:
+            os.environ.setdefault(_k, str(st.secrets[_k]))
+except Exception:
+    pass
 
 from src import database
 
