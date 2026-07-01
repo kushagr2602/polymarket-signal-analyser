@@ -1,0 +1,9 @@
+#!/bin/sh
+# Run the offline core tests before allowing a commit. Install once with:
+#   ln -sf ../../hooks/pre-commit .git/hooks/pre-commit
+cd "$(git rev-parse --show-toplevel)" || exit 1
+echo "pre-commit: running core tests…"
+if ! python3 tests/test_core.py; then
+    echo "pre-commit: tests failed — commit blocked (use 'git commit --no-verify' to override)"
+    exit 1
+fi

@@ -1,0 +1,54 @@
+"""Offline core tests — no network, no API keys, no DB. Run by the pre-commit hook.
+    python3 tests/test_core.py   (or: pytest)
+"""
+import os
+import sys
+
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+
+from src import polymarket, news
+
+
+def test_probability_from_outcome_prices():
+    r = polymarket._to_record({"id": "1", "outcomePrices": '["0.73","0.27"]', "volumeNum": 1000})
+    assert r["probability"] == 0.73, r
+    assert r["volume_usd"] == 1000.0, r
+    assert r["market_id"] == "1"
+
+
+def test_volume_falls_back_and_default_prob():
+    r = polymarket._to_record({"id": "2", "volume": "500"})  # no volumeNum, no prices
+    assert r["volume_usd"] == 500.0, r
+    assert r["probability"] == 0.5, r  # no outcomePrices → 0.5 default
+
+
+def test_prices_as_list_not_string():
+    r = polymarket._to_record({"id": "3", "outcomePrices": ["0.1", "0.9"]})
+    assert r["probability"] == 0.1, r
+
+
+def test_rss_parse_titles_and_links():
+    xml = b'<rss><channel><item><title> Fed cuts rates </title><link>http://x</link></item>' \
+          b'<item><title></title></item></channel></rss>'
+    items = news._parse_rss(xml, 10)
+    assert items == [{"title": "Fed cuts rates", "link": "http://x"}], items  # blank title dropped, trimmed
+
+
+def test_rss_respects_limit():
+    xml = b"<rss><channel>" + b"<item><title>h</title></item>" * 5 + b"</channel></rss>"
+    assert len(news._parse_rss(xml, 3)) == 3
+
+
+def test_expired_market_detection():
+    assert polymarket._is_expired({"endDate": "2020-01-01T00:00:00Z"}) is True
+    assert polymarket._is_expired({"endDate": "2099-01-01T00:00:00Z"}) is False
+    assert polymarket._is_expired({}) is False           # no date → treat as live
+    assert polymarket._is_expired({"endDate": "garbage"}) is False  # unparseable → don't drop
+
+
+if __name__ == "__main__":
+    tests = [v for k, v in sorted(globals().items()) if k.startswith("test_")]
+    for t in tests:
+        t()
+        print("ok", t.__name__)
+    print(f"\n{len(tests)} passed")
