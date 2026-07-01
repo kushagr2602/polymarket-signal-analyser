@@ -16,15 +16,15 @@ except Exception:
 
 from src import database
 
-# ── tactical-HUD palette: space navy, cyan structure, conviction heats cool→hot ──
-BG, PANEL, LINE = "#060A12", "#0B121C", "#18324A"
-TXT, MUTED, TEAL, AMBER, HOT = "#C8D6E5", "#5E7388", "#3FE0C5", "#FFB23E", "#FF5A47"
+# ── BIT Capital brand palette (from bitcap.com): alpha-black, capital-blue accent, sand ──
+BG, PANEL, LINE = "#151515", "#1B1B1B", "#2C2C2C"
+TXT, MUTED, TEAL, AMBER, HOT = "#FDFDFD", "#918A7C", "#5BC5F2", "#CDC6B5", "#EA384C"
 
 HOLDINGS = {"HIMS": "HEALTH-TECH", "HOOD": "FINTECH", "RDDT": "AI · DATA", "IREN": "AI-INFRA · CRYPTO"}
 
 
-def heat(score: int) -> str:  # dim-blue → teal → amber → hot, i.e. conviction "temperature"
-    return HOT if score >= 8 else AMBER if score >= 5 else TEAL if score >= 3 else "#3A5068"
+def heat(score: int) -> str:  # conviction as capital-blue intensity (brighter = stronger)
+    return "#5BC5F2" if score >= 8 else "#4391B4" if score >= 5 else "#235165" if score >= 3 else "#434343"
 
 
 def tier(score: int) -> str:
@@ -57,84 +57,70 @@ def agenda_html(up) -> str:
     return html + "</div>"
 
 
-st.set_page_config(page_title="BIT CAPITAL · SIGNAL DESK", page_icon="◆", layout="wide")
+st.set_page_config(page_title="BIT Capital · Signal Desk", page_icon="◆", layout="wide")
 
 st.markdown("""
 <style>
-@import url('https://fonts.googleapis.com/css2?family=Chakra+Petch:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap');
-html, body, [class*="css"] { font-family:'JetBrains Mono', monospace; color:#C8D6E5; }
+@import url('https://fonts.googleapis.com/css2?family=Archivo:wght@400;500;600;700&family=Newsreader:ital,opsz,wght@0,6..72,400;0,6..72,500;1,6..72,400&family=JetBrains+Mono:wght@400;500&display=swap');
+html, body, [class*="css"] { font-family:'Archivo', Helvetica, Arial, sans-serif; color:#FDFDFD; }
 #MainMenu, header, footer { visibility:hidden; }
-.stApp {
-  background:
-    radial-gradient(1200px 620px at 72% -8%, rgba(63,224,197,.07), transparent 60%),
-    radial-gradient(900px 500px at 10% 110%, rgba(255,178,62,.05), transparent 60%),
-    #060A12;
-}
-.stApp::before {  /* faint tactical grid */
-  content:''; position:fixed; inset:0; pointer-events:none; z-index:0;
-  background-image:linear-gradient(rgba(63,224,197,.035) 1px, transparent 1px),
-                   linear-gradient(90deg, rgba(63,224,197,.035) 1px, transparent 1px);
-  background-size:42px 42px;
-}
-.block-container { padding-top:1.4rem; padding-bottom:3rem; max-width:1320px; position:relative; z-index:1; }
+.stApp { background:#151515; }
+.block-container { padding-top:1.6rem; padding-bottom:3rem; max-width:1320px; }
+.mono { font-family:'JetBrains Mono', monospace; font-variant-numeric:tabular-nums; }
 
-/* HUD panel with corner brackets */
-.hud { position:relative; border:1px solid #18324A; background:rgba(11,18,28,.72); }
-.hud::before, .hud::after { content:''; position:absolute; width:11px; height:11px; border:2px solid #3FE0C5; }
-.hud::before { top:-1px; left:-1px; border-right:0; border-bottom:0; }
-.hud::after { bottom:-1px; right:-1px; border-left:0; border-top:0; }
+/* clean bordered surface (BIT Swiss-minimal — no brackets, no glow) */
+.hud { border:1px solid #2C2C2C; background:#1B1B1B; border-radius:10px; }
 
 /* masthead */
-.mh { display:flex; align-items:center; justify-content:space-between; padding:.8rem 1.1rem; margin-bottom:.4rem; }
-.mh .name { font-family:'Chakra Petch', sans-serif; font-weight:700; font-size:1.7rem; letter-spacing:.04em; color:#E6F1F5; }
-.mh .name b { color:#3FE0C5; }
-.mh .live { color:#46E08B; animation:pulse 1.8s ease-in-out infinite; margin-right:.5rem; }
-@keyframes pulse { 0%,100%{opacity:.35} 50%{opacity:1} }
-.mh .meta { font-size:.66rem; letter-spacing:.13em; color:#5E7388; text-align:right; line-height:1.7; }
-.dek { font-family:'Chakra Petch', sans-serif; font-size:.92rem; letter-spacing:.02em; color:#7E93A8; margin:.5rem .2rem 1.2rem; }
+.mh { display:flex; align-items:center; justify-content:space-between; padding:.9rem 1.2rem; margin-bottom:.5rem; }
+.mh .name { font-family:'Archivo', sans-serif; font-weight:700; font-size:1.55rem; letter-spacing:.14em; color:#FDFDFD; }
+.mh .name b { color:#5BC5F2; font-weight:700; }
+.mh .name .sub { color:#918A7C; font-weight:500; letter-spacing:.14em; }
+.mh .live { color:#5BC5F2; font-size:.7rem; animation:pulse 2.2s ease-in-out infinite; margin-right:.6rem; vertical-align:middle; }
+@keyframes pulse { 0%,100%{opacity:.3} 50%{opacity:1} }
+.mh .meta { font-family:'JetBrains Mono', monospace; font-size:.66rem; letter-spacing:.08em; color:#918A7C; text-align:right; line-height:1.7; }
+.dek { font-family:'Newsreader', serif; font-style:italic; font-size:1.05rem; color:#BDBAB6; margin:.6rem .2rem 1.4rem; }
 
-/* lede stat cells */
-.kpi-grid { display:grid; grid-template-columns:repeat(5,1fr); gap:.6rem; margin-bottom:.4rem; }
-.kpi { padding:.8rem .9rem; }
-.kpi .v { font-family:'Chakra Petch', sans-serif; font-weight:600; font-size:1.7rem; line-height:1.1; color:#E6F1F5; text-shadow:0 0 14px rgba(63,224,197,.25); }
-.kpi .v.teal { color:#3FE0C5; } .kpi .v.hot { color:#FF5A47; text-shadow:0 0 14px rgba(255,90,71,.3); }
-.kpi .l { font-size:.58rem; letter-spacing:.15em; color:#5E7388; margin-top:.3rem; }
+/* KPI cells — serif hero numbers echo BIT's Bureau Serif accent */
+.kpi-grid { display:grid; grid-template-columns:repeat(5,1fr); gap:.7rem; margin-bottom:.5rem; }
+.kpi { padding:.9rem 1rem; }
+.kpi .v { font-family:'Newsreader', serif; font-weight:500; font-size:2rem; line-height:1.05; color:#FDFDFD; }
+.kpi .v.teal { color:#5BC5F2; } .kpi .v.hot { color:#EA384C; }
+.kpi .l { font-family:'JetBrains Mono', monospace; font-size:.58rem; letter-spacing:.13em; color:#918A7C; margin-top:.4rem; }
 
-/* section header + terminal-style hint */
-.sec-h { font-family:'Chakra Petch', sans-serif; font-size:.74rem; font-weight:600; letter-spacing:.2em; color:#3FE0C5; margin:1.7rem 0 .15rem; }
-.sec-h::before { content:'// '; color:#3A5068; }
-.hint { font-size:.74rem; letter-spacing:.02em; color:#7E93A8; margin:.35rem 0 .85rem; }
-.hint::before { content:'› '; color:#3FE0C5; }
+/* section header + hint */
+.sec-h { font-family:'Archivo', sans-serif; font-size:.72rem; font-weight:600; letter-spacing:.2em; color:#918A7C; border-bottom:1px solid #2C2C2C; padding-bottom:.35rem; margin:1.9rem 0 .25rem; }
+.hint { font-family:'Newsreader', serif; font-style:italic; font-size:.95rem; color:#918A7C; margin:.5rem 0 1rem; }
 
 /* portfolio exposure */
-.pos-grid { display:grid; grid-template-columns:repeat(4,1fr); gap:.6rem; }
-.pos { padding:.7rem .95rem .85rem; }
-.pos .tkr { font-family:'Chakra Petch', sans-serif; font-weight:700; font-size:1.3rem; color:#E6F1F5; letter-spacing:.03em; }
-.pos .sec { font-size:.56rem; letter-spacing:.12em; color:#5E7388; }
-.pos .row { display:flex; justify-content:space-between; align-items:baseline; margin-top:.55rem; }
-.pos .n { font-family:'Chakra Petch', sans-serif; font-weight:600; font-size:1.5rem; color:var(--c); text-shadow:0 0 12px color-mix(in srgb, var(--c) 35%, transparent); }
-.pos .mx { font-size:.64rem; color:var(--c); }
+.pos-grid { display:grid; grid-template-columns:repeat(4,1fr); gap:.7rem; }
+.pos { padding:.85rem 1.05rem 1rem; border-left:2px solid var(--c); }
+.pos .tkr { font-family:'Archivo', sans-serif; font-weight:700; font-size:1.3rem; color:#FDFDFD; letter-spacing:.05em; }
+.pos .sec { font-family:'JetBrains Mono', monospace; font-size:.56rem; letter-spacing:.1em; color:#918A7C; }
+.pos .row { display:flex; justify-content:space-between; align-items:baseline; margin-top:.6rem; }
+.pos .n { font-family:'Newsreader', serif; font-weight:500; font-size:1.6rem; color:var(--c); }
+.pos .mx { font-family:'JetBrains Mono', monospace; font-size:.64rem; color:#918A7C; }
 
 /* news wire */
-.news { display:flex; gap:.85rem; align-items:flex-start; padding:.7rem .2rem; border-bottom:1px solid #142336; }
-.news .imp { font-family:'Chakra Petch', sans-serif; font-weight:700; font-size:1.35rem; line-height:1; color:var(--c); min-width:1.4rem; text-align:center; text-shadow:0 0 12px color-mix(in srgb, var(--c) 40%, transparent); }
-.news .ttl { color:#D6E2EF; font-size:.92rem; line-height:1.4; }
-.news .ttl a { color:inherit; text-decoration:none; border-bottom:1px solid #244055; }
-.news .ttl a:hover { color:#3FE0C5; border-color:#3FE0C5; }
-.news .meta { margin-top:.3rem; font-size:.64rem; letter-spacing:.04em; color:#5E7388; }
+.news { display:flex; gap:.9rem; align-items:flex-start; padding:.8rem .2rem; border-bottom:1px solid #2C2C2C; }
+.news .imp { font-family:'Newsreader', serif; font-weight:500; font-size:1.5rem; line-height:1; color:var(--c); min-width:1.4rem; text-align:center; }
+.news .ttl { color:#FDFDFD; font-size:.95rem; line-height:1.4; }
+.news .ttl a { color:inherit; text-decoration:none; border-bottom:1px solid #434343; }
+.news .ttl a:hover { color:#5BC5F2; border-color:#5BC5F2; }
+.news .meta { margin-top:.35rem; font-family:'JetBrains Mono', monospace; font-size:.64rem; letter-spacing:.03em; color:#918A7C; }
 .news .stance { color:var(--c); font-weight:600; }
-.news .note { color:#8499AD; }
+.news .note { font-family:'Newsreader', serif; font-style:italic; color:#BDBAB6; }
 
 /* agenda / schedule */
-.agenda { border:1px solid #18324A; border-radius:2px; overflow:hidden; }
-.ag-h { font-family:'JetBrains Mono', monospace; font-size:.6rem; letter-spacing:.15em; color:#5E7388; background:rgba(63,224,197,.05); padding:.4rem .85rem; }
-.ag-row { display:flex; align-items:center; gap:.75rem; padding:.5rem .85rem; border-top:1px solid #142336; }
-.ag-when { font-family:'JetBrains Mono', monospace; font-size:.62rem; letter-spacing:.03em; color:#7E93A8; min-width:52px; }
-.ag-q { flex:1; font-size:.86rem; color:#D6E2EF; line-height:1.3; }
-.ag-tk { font-family:'JetBrains Mono', monospace; font-size:.6rem; color:#8FA6BC; background:#0E1A28; padding:.12rem .45rem; border-radius:3px; }
-.ag-s { font-family:'Chakra Petch', sans-serif; font-weight:700; font-size:1.05rem; min-width:20px; text-align:center; }
+.agenda { border:1px solid #2C2C2C; border-radius:10px; overflow:hidden; }
+.ag-h { font-family:'JetBrains Mono', monospace; font-size:.6rem; letter-spacing:.14em; color:#918A7C; background:#1B1B1B; padding:.45rem .95rem; }
+.ag-row { display:flex; align-items:center; gap:.8rem; padding:.55rem .95rem; border-top:1px solid #242424; }
+.ag-when { font-family:'JetBrains Mono', monospace; font-size:.62rem; letter-spacing:.03em; color:#918A7C; min-width:54px; }
+.ag-q { flex:1; font-size:.9rem; color:#FDFDFD; line-height:1.3; }
+.ag-tk { font-family:'JetBrains Mono', monospace; font-size:.6rem; color:#CDC6B5; background:#242424; padding:.14rem .5rem; border-radius:4px; }
+.ag-s { font-family:'Newsreader', serif; font-weight:500; font-size:1.15rem; min-width:22px; text-align:center; }
 
-.stTabs [data-baseweb="tab"] { font-family:'Chakra Petch', sans-serif; font-size:.74rem; letter-spacing:.12em; }
+.stTabs [data-baseweb="tab"] { font-family:'Archivo', sans-serif; font-size:.74rem; letter-spacing:.12em; }
 </style>
 """, unsafe_allow_html=True)
 
@@ -191,7 +177,7 @@ today = datetime.now(timezone.utc).strftime("%Y.%m.%d").upper()
 
 st.markdown(f"""
 <div class="mh hud">
-  <div class="name"><span class="live">●</span><b>BIT</b> CAPITAL <b>/</b> SIGNAL DESK</div>
+  <div class="name"><span class="live">●</span><b>BIT</b> CAPITAL <span class="sub">/ SIGNAL DESK</span></div>
   <div class="meta">POLYMARKET FEED · {today}<br>LAST SCAN · {stamp}</div>
 </div>
 <div class="dek">Prediction markets, swept for what could move the book — HIMS · HOOD · RDDT · IREN.</div>
@@ -220,7 +206,7 @@ cards = ""
 for tkr, sec in HOLDINGS.items():
     hit = active[active.Tickers.apply(lambda ts: tkr in ts)]
     mx = int(hit.Score.max()) if len(hit) else 0
-    c = heat(mx) if len(hit) else "#3A5068"
+    c = heat(mx) if len(hit) else "#434343"
     cards += (f'<div class="pos hud" style="--c:{c}"><div class="tkr">{tkr}</div>'
               f'<div class="sec">{sec}</div><div class="row">'
               f'<span class="n">{len(hit)}</span><span class="mx">PEAK {mx}/10</span></div></div>')
@@ -232,10 +218,10 @@ def style_fig(fig, h=300):
         height=h, paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="rgba(0,0,0,0)",
         font=dict(color=MUTED, family="JetBrains Mono", size=11),
         margin=dict(l=10, r=10, t=34, b=10), showlegend=False,
-        title=dict(font=dict(color=TEAL, size=13, family="Chakra Petch")),
+        title=dict(font=dict(color=TXT, size=13, family="Archivo")),
     )
-    fig.update_xaxes(gridcolor="#10202F", zeroline=False, linecolor=LINE)
-    fig.update_yaxes(gridcolor="#10202F", zeroline=False, linecolor=LINE)
+    fig.update_xaxes(gridcolor="#242424", zeroline=False, linecolor=LINE)
+    fig.update_yaxes(gridcolor="#242424", zeroline=False, linecolor=LINE)
     return fig
 
 
@@ -261,7 +247,7 @@ with desk:
         sc = go.Figure(go.Scatter(
             x=active.Volume.clip(lower=1), y=active.Score, mode="markers",
             marker=dict(size=(active.Volume.clip(lower=1) ** 0.22) * 4 + 6,
-                        color=active.Score, colorscale=[[0, "#3A5068"], [0.4, TEAL], [0.7, AMBER], [1, HOT]],
+                        color=active.Score, colorscale=[[0, "#434343"], [0.4, "#235165"], [0.7, "#4391B4"], [1, "#5BC5F2"]],
                         cmin=0, cmax=10, line=dict(width=0.5, color=BG), opacity=0.92),
             customdata=active[["Market", "Tier"]],
             hovertemplate="<b>%{customdata[1]}</b> · %{y}/10<br>%{customdata[0]}<br>$%{x:,.0f}<extra></extra>",
@@ -351,7 +337,7 @@ with desk:
 with news_tab:
     st.markdown('<div class="sec-h">WORLD NEWS · PORTFOLIO READ-THROUGH</div>', unsafe_allow_html=True)
     st.markdown('<div class="hint">Today\'s headlines, each scored 0–5 for how much it moves a holding. Green = good for the stock, red = bad, grey = noise. Number = size of the effect.</div>', unsafe_allow_html=True)
-    stance_c = {"bullish": "#46E08B", "bearish": HOT, "neutral": MUTED}
+    stance_c = {"bullish": TEAL, "bearish": HOT, "neutral": MUTED}
     with st.spinner("READING THE WIRES…"):
         wires = load_news()
     if not wires:
@@ -360,7 +346,7 @@ with news_tab:
         only_relevant = st.toggle("Portfolio-relevant only (impact ≥ 2)", value=True)
         shown = [w for w in wires if w["impact"] >= 2] if only_relevant else wires
         for w in shown:
-            c = stance_c.get(w["stance"], MUTED) if w["impact"] else "#3A5068"
+            c = stance_c.get(w["stance"], MUTED) if w["impact"] else "#434343"
             tk = " · " + ", ".join(w["tickers"]) if w["tickers"] else ""
             link = f'<a href="{w["link"]}" target="_blank">{w["title"]}</a>' if w["link"] else w["title"]
             note = f' — <span class="note">{w["note"]}</span>' if w.get("note") else ""
