@@ -69,6 +69,15 @@ Individual stages are runnable too: `python3 -m src.polymarket` (fetch),
 | `app.py`            | Streamlit dashboard (Signal Desk · World News · Ask the Desk · Brief) |
 | `schema.sql`        | Postgres schema |
 
+## Configuring sectors and stocks
+
+The watch universe lives in two places, by design close to the logic that uses it:
+the holdings dict at the top of [app.py](app.py) (`HOLDINGS`) and the portfolio
+block + ticker allowlist in [src/filter.py](src/filter.py) (`PROMPT`, `TICKERS`).
+Change a holding or sector there, run `python3 -m src.scheduler --once`, and new
+scans score against the updated book. The dashboard's sector/ticker filters pick
+the change up automatically.
+
 ## Notes
 
 - Polymarket's Gamma API caps each request at 100 markets, so `fetch_markets`
