@@ -12,11 +12,7 @@ def _retrieve(question: str, k: int = 120) -> str:
     """Rank stored signals by keyword overlap with the question, then conviction. Context-stuff the top k.
     ponytail: keyword rank, not embeddings — corpus is a few hundred rows. Swap to pgvector if it grows past ~5k."""
     db = database.get_client()
-    sigs = (db.table("signals")
-            .select("relevance_score,sector,affected_tickers,reasoning,"
-                    "markets(question,probability,volume_usd,expiry_date)")
-            .gte("relevance_score", 1).order("relevance_score", desc=True)
-            .limit(400).execute().data)
+    sigs = database.get_signals(min_score=1)  # deduped, expired dropped — same clean path as the dashboard
     terms = {w for w in question.lower().split() if len(w) > 3}
 
     def rank(s):

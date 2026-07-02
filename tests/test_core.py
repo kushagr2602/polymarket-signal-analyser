@@ -46,6 +46,22 @@ def test_expired_market_detection():
     assert polymarket._is_expired({"endDate": "garbage"}) is False  # unparseable → don't drop
 
 
+def test_sports_guard_zeroes_without_llm():
+    from src import filter as f
+    for q in ["Will USA win the 2026 FIFA World Cup?", "Spread: United States (-1.5)",
+              "Blockx vs. Zverev: Match O/U 36.5", "Map 2: Odd/Even Total Kills?"]:
+        s = f.score_market({"market_id": "x", "question": q})  # no API call on this path
+        assert s["relevance_score"] == 0 and s["affected_tickers"] == [], (q, s)
+
+
+def test_sports_guard_leaves_finance_alone():
+    from src import filter as f
+    for q in ["Will the Fed cut interest rates in September 2026?",
+              "Will Bitcoin hit $150k by June 30, 2026?",
+              "Will the Democratic Party control the House after the midterms?"]:
+        assert not f.SPORTS_RE.search(q), q
+
+
 if __name__ == "__main__":
     tests = [v for k, v in sorted(globals().items()) if k.startswith("test_")]
     for t in tests:

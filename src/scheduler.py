@@ -42,10 +42,11 @@ def main():
         return
 
     sched = BlockingScheduler()
-    # ponytail: max_instances=1 (default) means a slow run just skips the next tick, no overlap
-    sched.add_job(pipeline, "interval", minutes=2, next_run_time=datetime.now())
+    # ponytail: max_instances=1 (default) means a slow run just skips the next tick, no overlap.
+    # Hourly is plenty for a daily-brief product; 2-min polling was ~7k Gamma requests/day for nothing.
+    sched.add_job(pipeline, "interval", hours=1, next_run_time=datetime.now())
     sched.add_job(reports.generate_report, "cron", hour=23)  # nightly brief
-    print("scheduler started: ingest+filter every 2 min, report nightly. Ctrl-C to stop.")
+    print("scheduler started: ingest+filter hourly, report nightly. Ctrl-C to stop.")
     sched.start()
 
 

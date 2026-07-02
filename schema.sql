@@ -13,7 +13,7 @@ create table if not exists markets (
 
 create table if not exists signals (
     id               uuid primary key default gen_random_uuid(),
-    market_id        text references markets(market_id),
+    market_id        text unique references markets(market_id),  -- one signal per market, ever
     relevance_score  int,
     sector           text,
     affected_tickers text[],

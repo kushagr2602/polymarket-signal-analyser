@@ -1,10 +1,11 @@
 name: scan
 
 # Keeps the deployed dashboard's data fresh without needing a local machine.
-# Runs the full pipeline (ingest → filter → daily report) every 30 minutes.
+# Hourly: a */30 cron on a private repo (~3,600 min/month) blows past GitHub's
+# 2,000 free Actions minutes; hourly stays comfortably inside it.
 on:
   schedule:
-    - cron: "*/30 * * * *"
+    - cron: "17 * * * *"
   workflow_dispatch: {}
 
 jobs:
