@@ -2,7 +2,26 @@
 ### An agentic pipeline that reads prediction markets for equity signals
 
 *Capstone — Google × Kaggle AI Agents Intensive (Vibe Coding edition, June 2026)*
+*Track: **Agents for Business** (insights generation for equity research)*
 *Kushagr Gupta · [repo link] · [video link]*
+
+## Course concepts demonstrated (requirement: ≥3)
+
+1. **Tool-using agent** — `src/agent.py`: a function-calling loop that plans and
+   chains typed tools (`query_signals`, `portfolio_exposure`, `get_latest_brief`),
+   with the tool trace surfaced in the UI.
+2. **MCP server** — `src/mcp_server.py`: the same tools exposed over the Model
+   Context Protocol (stdio), so any MCP client — Claude Desktop, an ADK agent —
+   can query the signal database. One implementation, two front-ends.
+3. **Security features** — deterministic guardrails around the LLM: regex
+   hard-zero for out-of-mandate markets *before* any model call, a ticker
+   allowlist that blocks hallucinated symbols, a hard tool-call budget on the
+   agent loop, and grounding rules that force "I don't know" over invention.
+4. **Agent evaluation** — `tests/eval_filter.py`: a 14-case labeled regression
+   gate over the scoring behaviour, which caught two real calibration failures
+   on its first run.
+5. **Spec-driven development** — the filtering contract was written before the
+   code; the eval set is that spec made executable.
 
 ## Rationale
 
