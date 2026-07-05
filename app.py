@@ -210,6 +210,12 @@ st.markdown(f"""
 <div class="dek">An agentic scanner that reads prediction markets for equity signals — watching {", ".join(HOLDINGS)} (edit in the sidebar).</div>
 """, unsafe_allow_html=True)
 
+with st.expander("New here? How to read this dashboard"):
+    try:
+        st.markdown(open(os.path.join(os.path.dirname(os.path.abspath(__file__)), "HOW_TO_READ.md")).read())
+    except OSError:
+        st.caption("HOW_TO_READ.md not found.")
+
 if df.empty:
     st.info("No signals yet. Run `python3 -m src.scheduler --once` to scan.")
     st.stop()
