@@ -5,13 +5,15 @@ an agent loop, not single-shot RAG. Tool trace is returned for transparency.
 """
 import json
 
-from . import database
+from . import config, database
 from .filter import client, MODEL
 
 MAX_TURNS = 5  # ponytail: hard cap on the loop; raise if tasks legitimately need more hops
 
-SYSTEM = """You are an equity analyst agent for a tech fund whose demo watchlist is
-HIMS (health-tech), HOOD (fintech), RDDT (AI/data), IREN (AI-infra/crypto).
+
+def _system() -> str:
+    return f"""You are an equity analyst agent.
+{config.holdings_block()}
 Answer using your tools — never invent markets, probabilities, or scores.
 If the data doesn't contain the answer, say so. Tight, concrete analyst tone."""
 
@@ -61,7 +63,7 @@ def get_latest_brief() -> str:
 def portfolio_exposure() -> dict:
     rows = database.get_signals(min_score=5)
     out = {}
-    for tkr in ("HIMS", "HOOD", "RDDT", "IREN"):
+    for tkr in config.get_watchlist()["tickers"]:
         hits = [r["relevance_score"] for r in rows if tkr in (r.get("affected_tickers") or [])]
         out[tkr] = {"signals": len(hits), "peak_score": max(hits, default=0)}
     return out
@@ -73,7 +75,7 @@ _IMPL = {"query_signals": query_signals, "get_latest_brief": get_latest_brief,
 
 def run(question: str, history: list[dict] | None = None) -> tuple[str, list[str]]:
     """Agent loop: plan → call tools → synthesize. Returns (answer, tool_trace)."""
-    msgs = [{"role": "system", "content": SYSTEM}] + (history or []) + [{"role": "user", "content": question}]
+    msgs = [{"role": "system", "content": _system()}] + (history or []) + [{"role": "user", "content": question}]
     trace = []
     for _ in range(MAX_TURNS):
         resp = client.chat.completions.create(model=MODEL, messages=msgs, tools=TOOLS)

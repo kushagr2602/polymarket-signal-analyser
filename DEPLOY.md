@@ -7,10 +7,10 @@ without your machine. Everything is code-ready; these steps need *your* logins.
 
 ## 1. Push to GitHub
 ```bash
-cd ~/Desktop/Job-Applications/bitcap-polymarket-scanner
-gh repo create bitcap-polymarket-scanner --private --source=. --push
+cd ~/Desktop/Job-Applications/polymarket-signal-analyser
+gh repo create polymarket-signal-analyser --private --source=. --push
 # or: create the repo on github.com, then:
-#   git remote add origin git@github.com:<you>/bitcap-polymarket-scanner.git
+#   git remote add origin git@github.com:<you>/polymarket-signal-analyser.git
 #   git push -u origin main
 ```
 `.env` and `.streamlit/secrets.toml` are gitignored — secrets never leave your machine.

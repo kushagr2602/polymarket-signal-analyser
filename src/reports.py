@@ -1,20 +1,22 @@
 import json
 from datetime import date
 
-from . import database
+from . import config, database
 from .filter import client, MODEL  # reuse configured OpenAI client + model
 
-REPORT_PROMPT = """You are a senior analyst at BIT Capital writing the daily Polymarket signal brief.
-Below are today's top prediction-market signals relevant to the portfolio (holdings: HIMS, HOOD, RDDT, IREN).
+REPORT_PROMPT = """You are a senior equity analyst writing the daily Polymarket signal brief.
+{holdings}
+
+Below are today's top prediction-market signals relevant to the watchlist.
 
 Signals (JSON):
 {signals}
 
 Write a concise markdown brief:
-- Lead with the single most actionable signal and what it implies for a specific holding.
+- Lead with the single most actionable signal and what it implies for a specific watched stock.
 - Group the rest by sector. For each, state the implied probability shift and the equity read-through.
 - Be specific and analyst-grade. No filler, no restating the question verbatim.
-- End with a one-line "Watchlist" of tickers to monitor.
+- End with a one-line "Watch next" list of tickers to monitor.
 """
 
 def generate_report(limit: int = 20) -> dict | None:
@@ -22,7 +24,8 @@ def generate_report(limit: int = 20) -> dict | None:
     signals = database.get_top_signals(limit)
     if not signals:
         return None
-    prompt = REPORT_PROMPT.format(signals=json.dumps(signals, indent=2, default=str))
+    prompt = REPORT_PROMPT.format(holdings=config.holdings_block(),
+                                  signals=json.dumps(signals, indent=2, default=str))
     resp = client.chat.completions.create(
         model=MODEL,
         messages=[{"role": "user", "content": prompt}],

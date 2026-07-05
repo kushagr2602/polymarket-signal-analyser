@@ -1,0 +1,16 @@
+{
+  "tickers": {
+    "NVDA": "AI chips & data-center compute",
+    "TSLA": "EVs, autonomy & energy",
+    "COIN": "crypto exchange & custody",
+    "LLY": "pharma & GLP-1 franchise"
+  },
+  "sectors": [
+    "AI & Semiconductors",
+    "Crypto & Fintech",
+    "Health & Biotech",
+    "EV & Energy",
+    "E-Commerce",
+    "Macro"
+  ]
+}

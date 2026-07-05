@@ -11,8 +11,12 @@ import sys
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from src.filter import score_market, TICKERS
+from src import config
+from src.filter import score_market
 
+TICKERS = set(config.get_watchlist()["tickers"])
+
+# Cases assume the default watchlist (NVDA, TSLA, COIN, LLY) — see watchlist.json.
 # (question, min_score, max_score, must_include_ticker | None)
 CASES = [
     # hard zeros — out of mandate
@@ -20,16 +24,16 @@ CASES = [
     ("Spread: Lakers (-4.5) vs Celtics",                             0, 0, None),
     ("Will Taylor Swift announce a tour in 2026?",                   0, 2, None),
     ("Will it snow in New York on Christmas Day?",                   0, 1, None),
-    # direct catalysts — must score high and tag the right holding
-    ("Will Bitcoin dip to $40,000 by December 31, 2026?",            6, 10, "IREN"),
-    ("Will the FDA approve a generic GLP-1 weight loss drug in 2026?", 5, 10, "HIMS"),
-    ("Will the SEC approve commission-free crypto trading rules for retail brokers?", 5, 10, "HOOD"),
-    ("Will Reddit sign a new AI data licensing deal in 2026?",       6, 10, "RDDT"),
+    # direct catalysts — must score high and tag the right stock
+    ("Will Bitcoin dip to $40,000 by December 31, 2026?",            6, 10, "COIN"),
+    ("Will the FDA approve Eli Lilly's next GLP-1 drug in 2026?",    6, 10, "LLY"),
+    ("Will the US ban NVIDIA AI chip exports to China in 2026?",     6, 10, "NVDA"),
+    ("Will Tesla deliver over 2 million vehicles in 2026?",          6, 10, "TSLA"),
     # sector / macro — mid band
     ("Will the EU AI Act enforcement be delayed to 2027?",           3, 8, None),
     ("Will the Fed cut interest rates in September 2026?",           3, 7, None),
     ("US recession declared in 2026?",                               3, 7, None),
-    ("Will China impose new tariffs on US semiconductor imports?",   3, 8, None),
+    ("Will China impose new tariffs on US semiconductor imports?",   3, 9, None),
     # weak / indirect — must stay low
     ("Will India's population exceed 1.46 billion in 2026?",         0, 2, None),
     ("Will the next James Bond actor be announced in 2026?",         0, 1, None),

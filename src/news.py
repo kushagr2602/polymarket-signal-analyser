@@ -2,21 +2,28 @@ import json
 import urllib.request
 import xml.etree.ElementTree as ET
 
+from . import config
 from .filter import client, MODEL
 
-# Free RSS, no API key. Macro themes mirror the BIT signal contract; Yahoo covers the holdings directly.
+# Free RSS, no API key. Macro themes mirror the filtering contract; Yahoo covers the watchlist directly.
 MACRO = ("https://news.google.com/rss/search?q="
          "Federal+Reserve+OR+interest+rates+OR+inflation+OR+recession+OR+crypto+OR+bitcoin+"
          "OR+FDA+OR+tariff+OR+%22AI+regulation%22+OR+antitrust+when:1d&hl=en-US&gl=US&ceid=US:en")
-TICKER = "https://feeds.finance.yahoo.com/rss/2.0/headline?s=HIMS,HOOD,RDDT,IREN&region=US&lang=en-US"
 
-ASSESS_PROMPT = """You are an analyst at BIT Capital (holdings: HIMS health-tech, HOOD fintech,
-RDDT AI/data, IREN AI-infra/crypto; sectors: AI Infra, Health-Tech, Fintech, E-Commerce, Adtech, Biotech, Crypto).
 
-For each numbered headline, judge its likely effect on the portfolio. Return a JSON object
+def _ticker_feed() -> str:
+    tickers = ",".join(config.get_watchlist()["tickers"])
+    return f"https://feeds.finance.yahoo.com/rss/2.0/headline?s={tickers}&region=US&lang=en-US"
+
+
+ASSESS_PROMPT = """You are an equity analyst.
+{holdings}
+
+For each numbered headline, judge its likely effect on the watchlist. Return a JSON object
 {{"items": [{{"i": <index>, "stance": "bullish|bearish|neutral", "impact": <0-5>,
-"tickers": ["<ticker>"...], "note": "<one sentence: the read-through to the portfolio>"}}]}}.
-impact 0 = irrelevant to BIT; 5 = direct, material catalyst for a holding. Most world news is 0-1.
+"tickers": ["<ticker>"...], "note": "<one sentence: the read-through to the watchlist>"}}]}}.
+impact 0 = irrelevant to the watchlist; 5 = direct, material catalyst for a watched stock.
+Most world news is 0-1. tickers may only contain watchlist tickers.
 
 Headlines:
 {headlines}"""
@@ -39,9 +46,9 @@ def _rss(url: str, limit: int) -> list[dict]:
 
 
 def fetch_headlines(macro: int = 18, ticker: int = 12) -> list[dict]:
-    """Pull recent macro + holding-specific headlines, deduped by title."""
+    """Pull recent macro + watchlist-specific headlines, deduped by title."""
     seen, items = set(), []
-    for url, n in ((MACRO, macro), (TICKER, ticker)):
+    for url, n in ((MACRO, macro), (_ticker_feed(), ticker)):
         try:
             for h in _rss(url, n):
                 key = h["title"].lower()
@@ -61,7 +68,7 @@ def assess_news() -> list[dict]:
     numbered = "\n".join(f"{i}. {h['title']}" for i, h in enumerate(items))
     resp = client.chat.completions.create(
         model=MODEL,
-        messages=[{"role": "user", "content": ASSESS_PROMPT.format(headlines=numbered)}],
+        messages=[{"role": "user", "content": ASSESS_PROMPT.format(holdings=config.holdings_block(), headlines=numbered)}],
         response_format={"type": "json_object"},
     )
     by_i = {a["i"]: a for a in json.loads(resp.choices[0].message.content).get("items", [])}

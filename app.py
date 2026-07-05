@@ -16,11 +16,14 @@ except Exception:
 
 from src import database
 
-# BIT Capital brand (bitcap.com): alpha-black, capital blue, sand neutrals
+# Design tokens: alpha-black, capital blue, sand neutrals
 BG, LINE, TXT, MUTED = "#151515", "#2C2C2C", "#FDFDFD", "#918A7C"
 BLUE, RED, SAND = "#5BC5F2", "#EA384C", "#CDC6B5"
 
-HOLDINGS = {"HIMS": "Health-Tech", "HOOD": "Fintech", "RDDT": "AI · Data", "IREN": "AI Infra · Crypto"}
+from src import config as wcfg
+
+WATCHLIST = wcfg.get_watchlist()
+HOLDINGS = WATCHLIST["tickers"]  # ticker → description, user-configurable in the sidebar
 
 
 def heat(score: int) -> str:  # conviction = capital-blue intensity
@@ -171,6 +174,28 @@ def to_df(sig: list[dict]) -> pd.DataFrame:
     return pd.DataFrame(rows)
 
 
+with st.sidebar:
+    st.markdown("**Watchlist**")
+    st.caption("New scans score against this list. Existing signals keep their original tags.")
+    tick_text = st.text_area("Tickers — `TICKER: description` per line",
+                             "\n".join(f"{t}: {d}" for t, d in WATCHLIST["tickers"].items()), height=140)
+    sect_text = st.text_area("Focus sectors — one per line",
+                             "\n".join(WATCHLIST["sectors"]), height=140)
+    if st.button("Save watchlist"):
+        tickers = {}
+        for line in tick_text.splitlines():
+            if ":" in line:
+                t, d = line.split(":", 1)
+                if t.strip():
+                    tickers[t.strip().upper()] = d.strip()
+        sectors = [s.strip() for s in sect_text.splitlines() if s.strip()]
+        if tickers and sectors:
+            wcfg.save_watchlist(tickers, sectors)
+            st.cache_data.clear()
+            st.rerun()
+        else:
+            st.error("Need at least one ticker and one sector.")
+
 sig, rep, n_markets = load()
 df = to_df(sig)
 last_scan = max((s.get("markets") or {}).get("fetched_at", "") for s in sig) if sig else ""
@@ -182,7 +207,7 @@ st.markdown(f"""
   <span class="name"><b>POLYMARKET</b> <span class="sub">SIGNAL ANALYSER</span></span>
   <span class="meta">{today} · last scan {stamp}</span>
 </div>
-<div class="dek">An agentic scanner that reads prediction markets for equity signals — demo watchlist: HIMS, HOOD, RDDT, IREN.</div>
+<div class="dek">An agentic scanner that reads prediction markets for equity signals — watching {", ".join(HOLDINGS)} (edit in the sidebar).</div>
 """, unsafe_allow_html=True)
 
 if df.empty:
@@ -202,10 +227,19 @@ st.markdown(f"""
 </div>
 """, unsafe_allow_html=True)
 
-st.markdown('<div class="sec-h">Portfolio exposure</div>', unsafe_allow_html=True)
-st.markdown('<div class="hint">Signals touching each holding, and the strongest one. More signals + higher peak = more brewing.</div>', unsafe_allow_html=True)
+st.markdown('<div class="sec-h">Watchlist exposure</div>', unsafe_allow_html=True)
+st.markdown('<div class="hint">Signals touching each watched stock, and the strongest one. More signals + higher peak = more brewing.</div>', unsafe_allow_html=True)
+watch = list(HOLDINGS.items())
+if not any(active.Tickers.apply(lambda ts: t in ts).any() for t, _ in watch):
+    # configured tickers not in the data yet (e.g. watchlist just changed) — show what the data has
+    from collections import Counter
+    found = Counter(t for ts in active.Tickers for t in ts).most_common(4)
+    if found:
+        watch = [(t, "from stored signals") for t, _ in found]
+        st.caption("Your configured tickers have no signals yet — showing tickers found in stored "
+                   "signals. Run `python3 -m src.scheduler --once` to scan against your watchlist.")
 cards = ""
-for tkr, sec in HOLDINGS.items():
+for tkr, sec in watch:
     hit = active[active.Tickers.apply(lambda ts: tkr in ts)]
     mx = int(hit.Score.max()) if len(hit) else 0
     c = heat(mx) if len(hit) else "#434343"
@@ -283,7 +317,8 @@ with desk:
     st.markdown('<div class="hint">8–10 direct hit on a holding · 5–7 sector · 3–4 macro. Filter, then watch what expires soon.</div>', unsafe_allow_html=True)
     fc = st.columns([1.4, 1.4, 1, 1.2])
     sectors = fc[0].multiselect("Sector", sorted(df.Sector.unique()))
-    tickers = fc[1].multiselect("Ticker", list(HOLDINGS))
+    ticker_opts = sorted({t for ts in df.Tickers for t in ts} | set(HOLDINGS))
+    tickers = fc[1].multiselect("Ticker", ticker_opts)
     min_score = fc[2].slider("Min conviction", 0, 10, 5)
     sort_by = fc[3].selectbox("Sort by", ["Conviction", "Volume", "Days to expiry"])
 

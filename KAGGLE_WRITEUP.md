@@ -29,8 +29,10 @@ Prediction markets price real-world events — Fed decisions, regulation, FDA
 rulings, crypto moves — in real time, but almost all of that volume is sports
 and entertainment noise. The question this project answers for an equity
 analyst: **which of the ~1,000 most-traded Polymarket markets actually matter
-to the stocks I cover, and why?** The demo watchlist is a real fund's public
-tech portfolio (HIMS, HOOD, RDDT, IREN); the universe is configurable.
+to the stocks I cover, and why?** The watchlist is fully user-configurable —
+tickers, descriptions, and focus sectors are edited in the dashboard sidebar,
+and every prompt in the system (filter, news, brief, agent) is built from that
+config at call time. Ships with an example set (NVDA, TSLA, COIN, LLY).
 
 ## What it does
 
@@ -83,7 +85,7 @@ caps at 100 rows and pages overlap while live volume reorders them; settled
 markets still report `active=true`; and PostgREST silently caps reads at
 1,000 rows — which caused the scanner to re-score everything past row 1,000
 and generate 1,126 duplicate signals before a paginated read + UNIQUE
-constraint fixed it at the root. Full detail in REPORT.md.
+constraint fixed it at the root. Full detail in the repo README.
 
 ## Cost
 

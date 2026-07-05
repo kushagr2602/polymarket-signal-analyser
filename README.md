@@ -1,91 +1,68 @@
-# BIT Capital — Polymarket Signal Scanner
+# Polymarket Signal Analyser
 
-Scans [Polymarket](https://polymarket.com) prediction markets, filters them for
-relevance to BIT Capital's tech-equity portfolio with an LLM, stores the signals
-in Postgres (Supabase), and serves them through a Streamlit UI.
+An agentic pipeline that scans [Polymarket](https://polymarket.com) prediction
+markets, scores each one 0–10 for relevance to **your** equity watchlist with an
+LLM, stores everything in Postgres (Supabase), writes a daily analyst brief, and
+serves it all through a dashboard with a tool-calling analyst agent.
 
-> **Deploy to a stable HTTPS URL:** see [DEPLOY.md](DEPLOY.md) (Streamlit Cloud + GitHub Actions, ~10 min).
+Built for the Google × Kaggle AI Agents Intensive capstone (Agents for Business).
 
 ## What it does
 
 ```
-Polymarket Gamma API  →  markets (Postgres)
-        →  LLM filter (OpenAI, scores 0–10 + sector + tickers + reasoning)
-        →  signals (Postgres)
-        →  LLM report generator (daily brief)
-        →  reports (Postgres)
-        →  Streamlit UI
+Polymarket Gamma API ─(hourly)→ markets ─→ LLM filter (0-10 + tickers + reasoning) ─→ signals
+                                                        │
+             dashboard ← analyst agent (tool loop) ← ───┤── → nightly brief
+                              │
+                        MCP server (same tools, open protocol)
 ```
 
-The filtering contract (what counts as "relevant" — Fed decisions, AI/crypto
-regulation, FDA approvals, tariffs, company catalysts for HIMS/HOOD/RDDT/IREN)
-lives in [PLAN.md](PLAN.md).
+## Configure your watchlist
+
+The watch universe lives in [watchlist.json](watchlist.json) and is editable in
+the dashboard sidebar — tickers with one-line descriptions, plus focus sectors.
+Every prompt (filter, news, brief, agent) is built from it at call time, so new
+scans immediately score against your book. Ships with an example set
+(NVDA, TSLA, COIN, LLY).
 
 ## Setup
 
-1. **Install deps**
-   ```bash
-   pip install -r requirements.txt
-   ```
-
-2. **Create the database tables** — paste [schema.sql](schema.sql) into the
-   Supabase SQL Editor and run it.
-
-3. **Configure secrets** — copy `.env.example` to `.env` and fill in:
-   ```
-   SUPABASE_URL=...
-   SUPABASE_KEY=...        # service_role for writes, or anon with RLS disabled
-   OPENAI_API_KEY=...
-   ```
+1. `pip install -r requirements.txt`
+2. Create a [Supabase](https://supabase.com) project, paste [schema.sql](schema.sql)
+   into the SQL editor, run it.
+3. Copy `.env.example` → `.env`, fill in `SUPABASE_URL`, `SUPABASE_KEY`,
+   `OPENAI_API_KEY`.
 
 ## Usage
 
 ```bash
-# one full pass: fetch → filter → report
-python3 -m src.scheduler --once
-
-# run on a schedule (ingest+filter every 6h, report nightly)
-python3 -m src.scheduler
-
-# launch the UI
-streamlit run app.py
+python3 -m src.scheduler --once     # one full pass: fetch → filter → report
+python3 -m src.scheduler            # hourly scans + nightly brief
+streamlit run app.py                # the dashboard
+python3 -m src.mcp_server           # expose the tools over MCP (stdio)
+python3 tests/eval_filter.py        # eval the filter against the labeled set
 ```
 
-Individual stages are runnable too: `python3 -m src.polymarket` (fetch),
-`python3 -m src.filter` (score one test market), `python3 -m src.reports`
-(generate a brief from stored signals).
+## Agentic design (course concepts)
 
-## Layout
-
-| File | Role |
-|------|------|
-| `src/polymarket.py` | Fetch top markets by volume (paginated past Gamma's 100/request cap) |
-| `src/filter.py`     | LLM relevance scoring (the core 40%) |
-| `src/reports.py`    | LLM daily brief from top signals |
-| `src/news.py`       | Free-RSS world/holding news, LLM-scored for portfolio impact |
-| `src/chat.py`       | "Ask the Desk" — grounded Q&A over stored signals + brief |
-| `src/database.py`   | Supabase CRUD |
-| `src/scheduler.py`  | Pipeline orchestration + APScheduler |
-| `app.py`            | Streamlit dashboard (Signal Desk · World News · Ask the Desk · Brief) |
-| `schema.sql`        | Postgres schema |
-
-## Configuring sectors and stocks
-
-The watch universe lives in two places, by design close to the logic that uses it:
-the holdings dict at the top of [app.py](app.py) (`HOLDINGS`) and the portfolio
-block + ticker allowlist in [src/filter.py](src/filter.py) (`PROMPT`, `TICKERS`).
-Change a holding or sector there, run `python3 -m src.scheduler --once`, and new
-scans score against the updated book. The dashboard's sector/ticker filters pick
-the change up automatically.
+- **Tool-calling agent** ([src/agent.py](src/agent.py)) — plans and chains
+  `query_signals` / `portfolio_exposure` / `get_latest_brief`; the UI shows the
+  tool trace.
+- **MCP server** ([src/mcp_server.py](src/mcp_server.py)) — the same tools over
+  the Model Context Protocol; config snippet for Claude Desktop in the docstring.
+- **Security** — sports/entertainment markets are hard-zeroed by regex *before*
+  any LLM call; `affected_tickers` is validated against the watchlist (the model
+  once invented a ticker); the agent loop has a hard tool-call budget.
+- **Evals** ([tests/eval_filter.py](tests/eval_filter.py)) — 14 labeled markets
+  with expected score bands as a regression gate on prompt changes.
 
 ## Notes
 
-- Polymarket's Gamma API caps each request at 100 markets, so `fetch_markets`
-  pages by `offset` to reach past the high-volume sports markets into the
-  macro/crypto/regulation markets that actually matter.
-- The LLM *is* the filter — there's no brittle keyword pre-filter. At
-  `gpt-4o-mini` prices, scoring a few hundred markets per run costs ~1–2 cents.
-- **Ask the Desk** uses retrieval-augmented Q&A, but deliberately *not* a vector
-  store: the corpus is a few hundred short signal rows, so retrieval is a
-  keyword-ranked DB pull stuffed into context. Swap to pgvector embeddings only
-  if the signal table grows past ~5k rows.
+- Polymarket's Gamma API caps each request at 100 markets; ingestion pages by
+  offset, dedupes overlapping pages, and drops already-resolved markets.
+- All reads go through one clean path (`database.get_signals`) that dedupes and
+  drops expired markets — dashboard, brief, and agent see the same data.
+- The LLM *is* the filter — no brittle keyword pre-filter. A full 1,000-market
+  scan costs ~1–2 cents on `gpt-4o-mini`; the sports guard skips ~25% of calls.
+- Retrieval is a keyword-ranked pull, deliberately not a vector store — swap in
+  pgvector if the signal table grows past ~5k rows.
