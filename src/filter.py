@@ -17,7 +17,7 @@ TICKERS = {"HIMS", "HOOD", "RDDT", "IREN"}  # LLM sometimes invents tickers ("IR
 SPORTS_RE = re.compile(
     r"\b(vs\.?|spread:|o/u|moneyline|world cup|fifa|uefa|premier league|bundesliga|la liga|serie a|"
     r"nba|nfl|nhl|mlb|ncaa|ufc|boxing|f1|grand prix|motogp|olympi\w*|wimbledon|atp|wta|grand slam|"
-    r"map \d|odd/even total|first blood|kills\??)\b",
+    r"map \d|odd/even total|first blood|kills\??)(?!\w)",
     re.IGNORECASE,
 )
 

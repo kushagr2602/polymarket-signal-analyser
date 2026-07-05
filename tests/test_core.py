@@ -48,10 +48,14 @@ def test_expired_market_detection():
 
 def test_sports_guard_zeroes_without_llm():
     from src import filter as f
-    for q in ["Will USA win the 2026 FIFA World Cup?", "Spread: United States (-1.5)",
-              "Blockx vs. Zverev: Match O/U 36.5", "Map 2: Odd/Even Total Kills?"]:
-        s = f.score_market({"market_id": "x", "question": q})  # no API call on this path
-        assert s["relevance_score"] == 0 and s["affected_tickers"] == [], (q, s)
+    saved, f.client = f.client, None  # guard must fire BEFORE any LLM call — no client, no luck
+    try:
+        for q in ["Will USA win the 2026 FIFA World Cup?", "Spread: United States (-1.5)",
+                  "Blockx vs. Zverev: Match O/U 36.5", "Map 2: Odd/Even Total Kills?"]:
+            s = f.score_market({"market_id": "x", "question": q})
+            assert s["relevance_score"] == 0 and s["affected_tickers"] == [], (q, s)
+    finally:
+        f.client = saved
 
 
 def test_sports_guard_leaves_finance_alone():
