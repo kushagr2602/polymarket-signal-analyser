@@ -57,7 +57,7 @@ def agenda_html(up) -> str:
     return html + "</div>"
 
 
-st.set_page_config(page_title="BIT Capital · Signal Desk", page_icon="◆", layout="wide")
+st.set_page_config(page_title="Polymarket Signal Analyser", page_icon="◆", layout="wide")
 
 st.markdown("""
 <style>
@@ -179,10 +179,10 @@ today = datetime.now(timezone.utc).strftime("%d %b %Y")
 
 st.markdown(f"""
 <div class="mh">
-  <span class="name"><b>BIT</b> CAPITAL <span class="sub">— SIGNAL DESK</span></span>
-  <span class="meta">Polymarket · {today} · last scan {stamp}</span>
+  <span class="name"><b>POLYMARKET</b> <span class="sub">SIGNAL ANALYSER</span></span>
+  <span class="meta">{today} · last scan {stamp}</span>
 </div>
-<div class="dek">Prediction markets, read for what could move the book — HIMS, HOOD, RDDT, IREN.</div>
+<div class="dek">An agentic scanner that reads prediction markets for equity signals — demo watchlist: HIMS, HOOD, RDDT, IREN.</div>
 """, unsafe_allow_html=True)
 
 if df.empty:
@@ -341,9 +341,11 @@ with ask:
         with st.chat_message("user"):
             st.markdown(q)
         with st.chat_message("assistant"):
-            with st.spinner("Consulting the desk…"):
-                from src import chat as deskchat
-                a = deskchat.answer(q, st.session_state.chat[-7:-1])
+            with st.spinner("Agent planning tool calls…"):
+                from src import agent
+                a, trace = agent.run(q, st.session_state.chat[-7:-1])
+            if trace:
+                st.caption("tools called: " + "  →  ".join(trace))
             st.markdown(a)
         st.session_state.chat.append({"role": "assistant", "content": a})
 

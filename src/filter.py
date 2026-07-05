@@ -43,11 +43,13 @@ Return JSON:
 }}
 
 Score rubric:
-8-10: Direct catalyst for a specific holding
+8-10: Direct catalyst for a specific holding — company-specific events (earnings, FDA decisions,
+      M&A, data-licensing deals, regulation aimed at that company) or the price of an asset the
+      company's business directly depends on (e.g. Bitcoin for a miner)
 5-7: Sector-level impact
-3-4: Macro signal with broad portfolio implications
-1-2: Weak/indirect connection
-0: Not relevant to any BIT Capital position or sector
+3-4: Macro signal with broad portfolio implications (rates, recession, tariffs)
+1-2: Weak/indirect connection; demographic or social statistics with no tradable equity path
+0: Not relevant to any position or sector
 
 Hard rules:
 - Sports, esports, celebrity, and entertainment outcomes are ALWAYS relevance_score 0 with no tickers.
