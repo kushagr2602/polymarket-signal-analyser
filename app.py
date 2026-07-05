@@ -258,17 +258,10 @@ st.markdown(f"""
 
 st.markdown('<div class="sec-h">Watchlist exposure</div>', unsafe_allow_html=True)
 st.markdown('<div class="hint">Signals touching each watched stock, and the strongest one. More signals + higher peak = more brewing.</div>', unsafe_allow_html=True)
-watch = list(HOLDINGS.items())
-if not any(active.Tickers.apply(lambda ts: t in ts).any() for t, _ in watch):
-    # configured tickers not in the data yet (e.g. watchlist just changed) — show what the data has
-    from collections import Counter
-    found = Counter(t for ts in active.Tickers for t in ts).most_common(4)
-    if found:
-        watch = [(t, "from stored signals") for t, _ in found]
-        st.caption("Your configured tickers have no signals yet — showing tickers found in stored "
-                   "signals. Run `python3 -m src.scheduler --once` to scan against your watchlist.")
+if not active.Tickers.apply(lambda ts: any(t in HOLDINGS for t in ts)).any():
+    st.caption("No signals tagged to your watchlist yet — run `python3 -m src.scheduler --once` against a fresh database to populate it.")
 cards = ""
-for tkr, sec in watch:
+for tkr, sec in HOLDINGS.items():
     hit = active[active.Tickers.apply(lambda ts: tkr in ts)]
     mx = int(hit.Score.max()) if len(hit) else 0
     c = heat(mx) if len(hit) else "#434343"
