@@ -4,6 +4,7 @@ from datetime import datetime, timezone
 import pandas as pd
 import plotly.graph_objects as go
 import streamlit as st
+from streamlit_autorefresh import st_autorefresh
 
 # On Streamlit Cloud secrets live in st.secrets, not env vars; mirror them so the
 # env-based src modules work unchanged. Locally (.env) this is a harmless no-op.
@@ -222,6 +223,7 @@ def _ago(iso: str) -> str:
 
 ago = _ago(last_scan)
 today = datetime.now(timezone.utc).strftime("%d %b %Y")
+st_autorefresh(interval=60_000, key="clock")  # rerun each minute so "N min ago" counts up live (data stays cached)
 
 st.markdown(f"""
 <div class="mh">
