@@ -77,6 +77,7 @@ html, body, [class*="css"] { font-family:'Archivo', Helvetica, Arial, sans-serif
 .mh .name b { color:#5BC5F2; font-weight:700; }
 .mh .name .sub { color:#918A7C; font-weight:500; }
 .mh .meta { font-family:'JetBrains Mono', monospace; font-size:.65rem; letter-spacing:.06em; color:#918A7C; }
+.mh .meta .fresh { color:#5BC5F2; }
 .dek { font-family:'Newsreader', serif; font-style:italic; font-size:1.02rem; color:#BDBAB6; margin:.85rem 0 2rem; }
 
 /* KPI factsheet strip — numbers + hairlines, no boxes */
@@ -200,12 +201,32 @@ sig, rep, n_markets = load()
 df = to_df(sig)
 last_scan = max((s.get("markets") or {}).get("fetched_at", "") for s in sig) if sig else ""
 stamp = last_scan[:16].replace("T", " ") + " UTC" if last_scan else "no scans"
+
+
+def _ago(iso: str) -> str:
+    if not iso:
+        return ""
+    try:
+        secs = (datetime.now(timezone.utc) - datetime.fromisoformat(iso.replace("Z", "+00:00"))).total_seconds()
+    except ValueError:
+        return ""
+    if secs < 90:
+        return "just now"
+    if secs < 3600:
+        return f"{int(secs // 60)} min ago"
+    if secs < 86400:
+        h = int(secs // 3600)
+        return f"{h} hr ago"
+    return f"{int(secs // 86400)} d ago"
+
+
+ago = _ago(last_scan)
 today = datetime.now(timezone.utc).strftime("%d %b %Y")
 
 st.markdown(f"""
 <div class="mh">
   <span class="name"><b>POLYMARKET</b> <span class="sub">SIGNAL ANALYSER</span></span>
-  <span class="meta">{today} · last scan {stamp}</span>
+  <span class="meta">{today} · last scan {stamp}{f' · <span class="fresh">{ago}</span>' if ago else ''}</span>
 </div>
 <div class="dek">An agentic scanner that reads prediction markets for equity signals — watching {", ".join(HOLDINGS)} (edit in the sidebar).</div>
 """, unsafe_allow_html=True)
