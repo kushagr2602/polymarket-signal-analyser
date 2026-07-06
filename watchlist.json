@@ -3,7 +3,15 @@
     "NVDA": "AI chips & data-center compute",
     "TSLA": "EVs, autonomy & energy",
     "COIN": "crypto exchange & custody",
-    "LLY": "pharma & GLP-1 franchise"
+    "LLY": "pharma & GLP-1 franchise",
+    "JNJ": "Pharmaceuticals and consumer health",
+    "PFE": "Global biopharmaceutical company",
+    "MRK": "Research-driven pharmaceutical company",
+    "ABBV": "Biopharmaceutical company focused on immunology",
+    "UNH": "Health insurance and managed care",
+    "GILD": "Biopharmaceutical company for HIV and liver diseases",
+    "AMGN": "Biotechnology company focused on therapies",
+    "CVS": "Pharmacy and healthcare services"
   },
   "sectors": [
     "AI & Semiconductors",

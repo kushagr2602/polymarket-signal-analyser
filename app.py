@@ -195,29 +195,55 @@ def to_df(sig: list[dict]) -> pd.DataFrame:
     return pd.DataFrame(rows)
 
 
+@st.cache_data(ttl=3600, show_spinner=False)
+def suggest_tickers(industry: str) -> dict:
+    """LLM → up to 8 liquid, US-listed tickers central to an industry/theme, with short labels."""
+    import json
+    from src.filter import client, MODEL
+    if client is None or not industry.strip():
+        return {}
+    prompt = (f'List up to 8 liquid, US-listed public-company stock tickers most central to "{industry}". '
+              'No ETFs or funds. Return JSON {"tickers": {"TICKER": "3-5 word business description"}}.')
+    try:
+        r = client.chat.completions.create(model=MODEL, messages=[{"role": "user", "content": prompt}],
+                                           response_format={"type": "json_object"})
+        return {k.upper(): v for k, v in json.loads(r.choices[0].message.content).get("tickers", {}).items()}
+    except Exception:
+        return {}
+
+
 with st.sidebar:
     st.radio("Theme", ["Dark", "Light"], key="theme", horizontal=True)
     st.divider()
     st.markdown("**Watchlist**")
     st.caption("New scans score against this list. Existing signals keep their original tags.")
-    tick_text = st.text_area("Tickers — `TICKER: description` per line",
-                             "\n".join(f"{t}: {d}" for t, d in WATCHLIST["tickers"].items()), height=140)
-    sect_text = st.text_area("Focus sectors — one per line",
-                             "\n".join(WATCHLIST["sectors"]), height=140)
-    if st.button("Save watchlist"):
-        tickers = {}
-        for line in tick_text.splitlines():
-            if ":" in line:
-                t, d = line.split(":", 1)
-                if t.strip():
-                    tickers[t.strip().upper()] = d.strip()
+
+    picked = dict(WATCHLIST["tickers"])  # {ticker: desc}
+    keep = st.multiselect("Tracking", options=list(picked), default=list(picked),
+                          help="Deselect a ticker to drop it.")
+    picked = {t: picked[t] for t in keep}
+
+    industry = st.text_input("Add by industry or theme", placeholder="e.g. semiconductors, biotech, defense")
+    if industry.strip():
+        with st.spinner("Finding tickers…"):
+            sugg = {t: d for t, d in suggest_tickers(industry.strip()).items() if t not in picked}
+        if sugg:
+            add = st.multiselect(f"Suggested for “{industry.strip()}”", options=list(sugg),
+                                 format_func=lambda t: f"{t} — {sugg[t]}")
+            for t in add:
+                picked[t] = sugg[t]
+        else:
+            st.caption("No new tickers found — try a broader term.")
+
+    sect_text = st.text_area("Focus sectors — one per line", "\n".join(WATCHLIST["sectors"]), height=120)
+    if st.button("Save watchlist", type="primary"):
         sectors = [s.strip() for s in sect_text.splitlines() if s.strip()]
-        if tickers and sectors:
-            wcfg.save_watchlist(tickers, sectors)
+        if picked and sectors:
+            wcfg.save_watchlist(picked, sectors)
             st.cache_data.clear()
             st.rerun()
         else:
-            st.error("Need at least one ticker and one sector.")
+            st.error("Keep at least one ticker and one sector.")
 
 sig, rep, n_markets = load()
 df = to_df(sig)
