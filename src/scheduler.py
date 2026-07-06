@@ -29,6 +29,23 @@ def filter_new(limit: int = 300):
     return scored
 
 
+def rescore(limit: int = 300):
+    """Re-score the top markets by volume against the CURRENT watchlist (upsert, overwrites).
+    Use after the watchlist changes so new tickers get signals from existing markets."""
+    ingest()  # refresh prices first
+    markets = database._all_rows("markets", "*", order="volume_usd")[:limit]
+    scored = 0
+    for m in markets:
+        try:
+            database.upsert_signal(score_market(m))
+            scored += 1
+        except Exception as e:
+            print(f"  skip {m['market_id']}: {e}")
+    print(f"rescore: scored {scored}/{len(markets)} against current watchlist")
+    reports.generate_report()
+    return scored
+
+
 def pipeline():
     ingest()
     filter_new(40)  # bounded so a 2-min tick finishes; backlog clears over successive ticks
@@ -39,6 +56,9 @@ def main():
         ingest()
         filter_new(400)  # manual run: big catch-up
         reports.generate_report()
+        return
+    if "--rescore" in sys.argv:
+        rescore()
         return
 
     sched = BlockingScheduler()

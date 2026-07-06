@@ -1,4 +1,5 @@
 import os
+import sys
 from datetime import datetime, timezone
 
 import pandas as pd
@@ -244,6 +245,17 @@ with st.sidebar:
             st.rerun()
         else:
             st.error("Keep at least one ticker and one sector.")
+
+    st.divider()
+    if st.button("↻ Rescan markets", help="Re-score the top markets against the current watchlist. ~5 min; runs in the background."):
+        import subprocess
+        subprocess.Popen([sys.executable, "-m", "src.scheduler", "--rescore"],
+                         cwd=os.path.dirname(os.path.abspath(__file__)),
+                         stdout=open("/tmp/rescan.log", "a"), stderr=subprocess.STDOUT)
+        st.success("Rescan started — scoring the top markets against your watchlist. Give it a few minutes, then hit Reload.")
+    if st.button("⟳ Reload data"):
+        st.cache_data.clear()
+        st.rerun()
 
 sig, rep, n_markets = load()
 df = to_df(sig)

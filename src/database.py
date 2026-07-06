@@ -32,6 +32,11 @@ def insert_signal(signal: dict):
     db.table("signals").insert(signal).execute()
 
 
+def upsert_signal(signal: dict):
+    # overwrite an existing signal for the market — used when re-scoring against a changed watchlist
+    get_client().table("signals").upsert(signal, on_conflict="market_id").execute()
+
+
 def insert_report(report: dict):
     db = get_client()
     db.table("reports").insert(report).execute()
