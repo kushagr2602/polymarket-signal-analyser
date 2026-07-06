@@ -125,6 +125,7 @@ html, body, [class*="css"] { font-family:'Archivo', Helvetica, Arial, sans-serif
             text-transform:uppercase; color:var(--muted); margin-top:.1rem; }
 .pos .row { display:flex; justify-content:space-between; align-items:baseline; margin-top:.85rem; }
 .pos .n { font-family:'Newsreader', serif; font-weight:500; font-size:1.75rem; line-height:1; color:var(--c); }
+.pos .nl { font-family:'JetBrains Mono', monospace; font-size:.62rem; letter-spacing:.04em; color:var(--muted); margin-left:.3rem; }
 .pos .mx { font-family:'JetBrains Mono', monospace; font-size:.62rem; color:var(--muted); }
 
 .news { display:flex; gap:1rem; align-items:flex-start; padding:.85rem 0; border-bottom:1px solid var(--line2); }
@@ -321,7 +322,7 @@ st.markdown(f"""
 """, unsafe_allow_html=True)
 
 st.markdown('<div class="sec-h">Watchlist exposure</div>', unsafe_allow_html=True)
-st.markdown('<div class="hint">Signals touching each watched stock, and the strongest one. More signals + higher peak = more brewing.</div>', unsafe_allow_html=True)
+st.markdown('<div class="hint">Big number = how many live signals mention this stock. “peak conviction” = the single strongest one\'s score (0–10). Lots of signals <em>and</em> a high peak = the most brewing.</div>', unsafe_allow_html=True)
 if not active.Tickers.apply(lambda ts: any(t in HOLDINGS for t in ts)).any():
     st.caption("No signals tagged to your watchlist yet — run `python3 -m src.scheduler --once` against a fresh database to populate it.")
 cards = ""
@@ -331,7 +332,8 @@ for tkr, sec in HOLDINGS.items():
     c = heat(mx) if len(hit) else "#434343"
     cards += (f'<div class="pos" style="--c:{c}"><div class="tkr">{tkr}</div>'
               f'<div class="sec">{sec}</div><div class="row">'
-              f'<span class="n">{len(hit)}</span><span class="mx">peak {mx}/10</span></div></div>')
+              f'<span><span class="n">{len(hit)}</span><span class="nl">signals</span></span>'
+              f'<span class="mx">peak conviction {mx}/10</span></div></div>')
 st.markdown(f'<div class="pos-grid">{cards}</div>', unsafe_allow_html=True)
 
 
