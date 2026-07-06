@@ -17,18 +17,30 @@ except Exception:
 
 from src import database
 
-# Design tokens: alpha-black, capital blue, sand neutrals
-BG, LINE, TXT, MUTED = "#151515", "#2C2C2C", "#FDFDFD", "#918A7C"
-BLUE, RED, SAND = "#5BC5F2", "#EA384C", "#CDC6B5"
-
 from src import config as wcfg
 
 WATCHLIST = wcfg.get_watchlist()
 HOLDINGS = WATCHLIST["tickers"]  # ticker → description, user-configurable in the sidebar
 
+# Two palettes; the sidebar Theme toggle picks one. CSS reads these as custom properties,
+# charts + inline styles read the same values from Python. Conviction stays a blue ramp;
+# in light mode it darkens (deeper blue = higher) so it reads on paper.
+PALETTES = {
+    "Dark": dict(bg="#151515", surface="#1B1B1B", line="#2C2C2C", line2="#242424", hair2="#434343",
+                 text="#FDFDFD", muted="#918A7C", soft="#BDBAB6", accent="#5BC5F2", sand="#CDC6B5",
+                 red="#EA384C", rule="#FDFDFD", heat=("#5BC5F2", "#4391B4", "#235165", "#434343"),
+                 bar="#4391B4", scale=[[0, "#434343"], [0.4, "#235165"], [0.7, "#4391B4"], [1, "#5BC5F2"]]),
+    "Light": dict(bg="#F4F2EC", surface="#ECEAE2", line="#DCD8CE", line2="#E6E2D8", hair2="#C9C4B8",
+                  text="#1A1A17", muted="#6B665E", soft="#55504A", accent="#17698F", sand="#6B665E",
+                  red="#B23B2E", rule="#1A1A17", heat=("#0C447C", "#185FA5", "#4391B4", "#B4B2A9"),
+                  bar="#185FA5", scale=[[0, "#B4B2A9"], [0.4, "#4391B4"], [0.7, "#185FA5"], [1, "#0C447C"]]),
+}
+C = PALETTES["Dark"]  # rebound below once the theme is read (after set_page_config)
 
-def heat(score: int) -> str:  # conviction = capital-blue intensity
-    return "#5BC5F2" if score >= 8 else "#4391B4" if score >= 5 else "#235165" if score >= 3 else "#434343"
+
+def heat(score: int) -> str:  # conviction as blue intensity (theme-aware via C)
+    h = C["heat"]
+    return h[0] if score >= 8 else h[1] if score >= 5 else h[2] if score >= 3 else h[3]
 
 
 def tier(score: int) -> str:
@@ -61,84 +73,91 @@ def agenda_html(up) -> str:
     return html + "</div>"
 
 
-st.set_page_config(page_title="Polymarket Signal Analyser", page_icon="◆", layout="wide")
+st.set_page_config(page_title="Polymarket Signal Analyser", page_icon="◆",
+                   layout="wide", initial_sidebar_state="expanded")
 
-st.markdown("""
-<style>
+THEME = st.session_state.get("theme", "Dark")
+C = PALETTES[THEME]
+BG, LINE, LINE2, TXT, MUTED, BLUE, RED = C["bg"], C["line"], C["line2"], C["text"], C["muted"], C["accent"], C["red"]
+
+_root = (":root{" + "".join(f"--{k}:{C[k]};" for k in
+         ("bg", "surface", "line", "line2", "hair2", "text", "muted", "soft", "accent", "sand", "rule")) + "}")
+
+st.markdown(f"<style>{_root}" + """
 @import url('https://fonts.googleapis.com/css2?family=Archivo:wght@400;500;600;700&family=Newsreader:ital,opsz,wght@0,6..72,400;0,6..72,500;1,6..72,400&family=JetBrains+Mono:wght@400;500&display=swap');
-html, body, [class*="css"] { font-family:'Archivo', Helvetica, Arial, sans-serif; color:#FDFDFD; }
-#MainMenu, header, footer { visibility:hidden; }
-.stApp { background:#151515; }
+html, body, [class*="css"] { font-family:'Archivo', Helvetica, Arial, sans-serif; color:var(--text); }
+#MainMenu, footer { visibility:hidden; }
+[data-testid="stHeader"] { background:transparent; }
+.stApp { background:var(--bg); }
+[data-testid="stSidebar"] { background:var(--surface); border-right:1px solid var(--line); }
 .block-container { padding-top:2.2rem; padding-bottom:4rem; max-width:1280px; }
 
-/* masthead — quiet, ruled, no gimmicks */
-.mh { border-top:2px solid #FDFDFD; border-bottom:1px solid #2C2C2C; padding:1.05rem 0 1rem;
+.mh { border-top:2px solid var(--rule); border-bottom:1px solid var(--line); padding:1.05rem 0 1rem;
       display:flex; align-items:baseline; justify-content:space-between; }
-.mh .name { font-weight:700; font-size:1.12rem; letter-spacing:.22em; color:#FDFDFD; }
-.mh .name b { color:#5BC5F2; font-weight:700; }
-.mh .name .sub { color:#918A7C; font-weight:500; }
-.mh .meta { font-family:'JetBrains Mono', monospace; font-size:.65rem; letter-spacing:.06em; color:#918A7C; }
-.mh .meta .fresh { color:#5BC5F2; }
-.dek { font-family:'Newsreader', serif; font-style:italic; font-size:1.02rem; color:#BDBAB6; margin:.85rem 0 2rem; }
+.mh .name { font-weight:700; font-size:1.12rem; letter-spacing:.22em; color:var(--text); }
+.mh .name b { color:var(--accent); font-weight:700; }
+.mh .name .sub { color:var(--muted); font-weight:500; }
+.mh .meta { font-family:'JetBrains Mono', monospace; font-size:.65rem; letter-spacing:.06em; color:var(--muted); }
+.mh .meta .fresh { color:var(--accent); }
+.dek { font-family:'Newsreader', serif; font-style:italic; font-size:1.02rem; color:var(--soft); margin:.85rem 0 2rem; }
 
-/* KPI factsheet strip — numbers + hairlines, no boxes */
-.kpi-grid { display:grid; grid-template-columns:repeat(5,1fr); border-top:1px solid #2C2C2C;
-            border-bottom:1px solid #2C2C2C; margin-bottom:2.2rem; }
-.kpi { padding:1.05rem 1.15rem; border-left:1px solid #2C2C2C; }
+.kpi-grid { display:grid; grid-template-columns:repeat(5,1fr); border-top:1px solid var(--line);
+            border-bottom:1px solid var(--line); margin-bottom:2.2rem; }
+.kpi { padding:1.05rem 1.15rem; border-left:1px solid var(--line); }
 .kpi:first-child { border-left:none; padding-left:0; }
 .kpi .v { font-family:'Newsreader', serif; font-weight:500; font-size:1.9rem; line-height:1;
-          color:#FDFDFD; font-variant-numeric:lining-nums tabular-nums; }
-.kpi .v.blue { color:#5BC5F2; }
+          color:var(--text); font-variant-numeric:lining-nums tabular-nums; }
+.kpi .v.blue { color:var(--accent); }
 .kpi .l { font-family:'JetBrains Mono', monospace; font-size:.6rem; letter-spacing:.14em;
-          text-transform:uppercase; color:#918A7C; margin-top:.5rem; }
+          text-transform:uppercase; color:var(--muted); margin-top:.5rem; }
 
-/* section header + one consistent caption style */
 .sec-h { font-family:'JetBrains Mono', monospace; font-size:.66rem; font-weight:500; letter-spacing:.2em;
-         text-transform:uppercase; color:#FDFDFD; border-bottom:1px solid #2C2C2C;
+         text-transform:uppercase; color:var(--text); border-bottom:1px solid var(--line);
          padding-bottom:.45rem; margin:2.4rem 0 .3rem; }
-.sec-h em { color:#5BC5F2; font-style:normal; }
-.hint { font-size:.78rem; color:#918A7C; margin:.45rem 0 1rem; line-height:1.5; }
+.sec-h em { color:var(--accent); font-style:normal; }
+.hint { font-size:.78rem; color:var(--muted); margin:.45rem 0 1rem; line-height:1.5; }
 
-/* portfolio exposure — flat, ruled */
 .pos-grid { display:grid; grid-template-columns:repeat(4,1fr); gap:1.4rem; }
 .pos { border-top:2px solid var(--c); padding-top:.7rem; }
-.pos .tkr { font-weight:700; font-size:1.18rem; letter-spacing:.04em; color:#FDFDFD; }
+.pos .tkr { font-weight:700; font-size:1.18rem; letter-spacing:.04em; color:var(--text); }
 .pos .sec { font-family:'JetBrains Mono', monospace; font-size:.6rem; letter-spacing:.1em;
-            text-transform:uppercase; color:#918A7C; margin-top:.1rem; }
+            text-transform:uppercase; color:var(--muted); margin-top:.1rem; }
 .pos .row { display:flex; justify-content:space-between; align-items:baseline; margin-top:.85rem; }
 .pos .n { font-family:'Newsreader', serif; font-weight:500; font-size:1.75rem; line-height:1; color:var(--c); }
-.pos .mx { font-family:'JetBrains Mono', monospace; font-size:.62rem; color:#918A7C; }
+.pos .mx { font-family:'JetBrains Mono', monospace; font-size:.62rem; color:var(--muted); }
 
-/* news wire */
-.news { display:flex; gap:1rem; align-items:flex-start; padding:.85rem 0; border-bottom:1px solid #242424; }
+.news { display:flex; gap:1rem; align-items:flex-start; padding:.85rem 0; border-bottom:1px solid var(--line2); }
 .news .imp { font-family:'Newsreader', serif; font-weight:500; font-size:1.45rem; line-height:1.1;
              color:var(--c); min-width:1.3rem; text-align:center; }
-.news .ttl { font-size:.94rem; line-height:1.45; color:#FDFDFD; }
-.news .ttl a { color:inherit; text-decoration:none; border-bottom:1px solid #434343; }
-.news .ttl a:hover { color:#5BC5F2; border-color:#5BC5F2; }
+.news .ttl { font-size:.94rem; line-height:1.45; color:var(--text); }
+.news .ttl a { color:inherit; text-decoration:none; border-bottom:1px solid var(--hair2); }
+.news .ttl a:hover { color:var(--accent); border-color:var(--accent); }
 .news .meta { margin-top:.35rem; font-family:'JetBrains Mono', monospace; font-size:.63rem;
-              letter-spacing:.04em; color:#918A7C; }
+              letter-spacing:.04em; color:var(--muted); }
 .news .stance { color:var(--c); font-weight:500; text-transform:uppercase; }
-.news .note { color:#BDBAB6; }
+.news .note { color:var(--soft); }
 
-/* agenda */
-.agenda { border:1px solid #2C2C2C; }
+.agenda { border:1px solid var(--line); }
 .ag-h { font-family:'JetBrains Mono', monospace; font-size:.6rem; letter-spacing:.14em;
-        text-transform:uppercase; color:#918A7C; background:#1B1B1B; padding:.45rem .9rem; }
-.ag-row { display:flex; align-items:center; gap:.85rem; padding:.55rem .9rem; border-top:1px solid #242424; }
-.ag-when { font-family:'JetBrains Mono', monospace; font-size:.63rem; color:#918A7C; min-width:44px; text-align:right; }
-.ag-q { flex:1; font-size:.88rem; line-height:1.35; color:#FDFDFD; }
-.ag-tk { font-family:'JetBrains Mono', monospace; font-size:.6rem; color:#CDC6B5; }
+        text-transform:uppercase; color:var(--muted); background:var(--surface); padding:.45rem .9rem; }
+.ag-row { display:flex; align-items:center; gap:.85rem; padding:.55rem .9rem; border-top:1px solid var(--line2); }
+.ag-when { font-family:'JetBrains Mono', monospace; font-size:.63rem; color:var(--muted); min-width:44px; text-align:right; }
+.ag-q { flex:1; font-size:.88rem; line-height:1.35; color:var(--text); }
+.ag-tk { font-family:'JetBrains Mono', monospace; font-size:.6rem; color:var(--sand); }
 .ag-s { font-family:'Newsreader', serif; font-weight:500; font-size:1.1rem; min-width:20px; text-align:center; }
 
-/* streamlit chrome */
-.stTabs [data-baseweb="tab-list"] { gap:1.6rem; border-bottom:1px solid #2C2C2C; }
+.stTabs [data-baseweb="tab-list"] { gap:1.6rem; border-bottom:1px solid var(--line); }
 .stTabs [data-baseweb="tab"] { font-family:'JetBrains Mono', monospace; font-size:.68rem;
-                               letter-spacing:.16em; text-transform:uppercase; color:#918A7C;
+                               letter-spacing:.16em; text-transform:uppercase; color:var(--muted);
                                padding-left:0; padding-right:0; }
-.stTabs [aria-selected="true"] { color:#FDFDFD; }
-</style>
-""", unsafe_allow_html=True)
+.stTabs [aria-selected="true"] { color:var(--text); }
+
+/* dataframe follows the theme (glide-data-grid custom props) */
+[data-testid="stDataFrame"] { --gdg-bg-cell:var(--bg); --gdg-bg-cell-medium:var(--surface);
+    --gdg-text-dark:var(--text); --gdg-text-medium:var(--muted); --gdg-text-light:var(--muted);
+    --gdg-bg-header:var(--surface); --gdg-bg-header-hovered:var(--line); --gdg-bg-header-has-focus:var(--line);
+    --gdg-border-color:var(--line); --gdg-horizontal-border-color:var(--line2); --gdg-text-header:var(--muted); }
+</style>""", unsafe_allow_html=True)
 
 
 @st.cache_data(ttl=600)
@@ -177,6 +196,8 @@ def to_df(sig: list[dict]) -> pd.DataFrame:
 
 
 with st.sidebar:
+    st.radio("Theme", ["Dark", "Light"], key="theme", horizontal=True)
+    st.divider()
     st.markdown("**Watchlist**")
     st.caption("New scans score against this list. Existing signals keep their original tags.")
     tick_text = st.text_area("Tickers — `TICKER: description` per line",
@@ -277,8 +298,8 @@ def style_fig(fig, h=300):
         font=dict(color=MUTED, family="JetBrains Mono", size=11),
         margin=dict(l=10, r=10, t=12, b=10), showlegend=False,
     )
-    fig.update_xaxes(gridcolor="#242424", zeroline=False, linecolor=LINE)
-    fig.update_yaxes(gridcolor="#242424", zeroline=False, linecolor=LINE)
+    fig.update_xaxes(gridcolor=LINE2, zeroline=False, linecolor=LINE)
+    fig.update_yaxes(gridcolor=LINE2, zeroline=False, linecolor=LINE)
     return fig
 
 
@@ -305,8 +326,7 @@ with desk:
         sc = go.Figure(go.Scatter(
             x=active.Volume.clip(lower=1), y=active.Score, mode="markers",
             marker=dict(size=(active.Volume.clip(lower=1) ** 0.22) * 4 + 6,
-                        color=active.Score,
-                        colorscale=[[0, "#434343"], [0.4, "#235165"], [0.7, "#4391B4"], [1, "#5BC5F2"]],
+                        color=active.Score, colorscale=C["scale"],
                         cmin=0, cmax=10, line=dict(width=0.5, color=BG), opacity=0.92),
             customdata=active[["Market", "Tier"]],
             hovertemplate="<b>%{customdata[1]}</b> · %{y}/10<br>%{customdata[0]}<br>$%{x:,.0f}<extra></extra>",
@@ -330,7 +350,7 @@ with desk:
         buckets = pd.cut(active.Prob.dropna(), bins=[0, .2, .4, .6, .8, 1.0],
                          labels=["0–20%", "20–40%", "40–60%", "60–80%", "80–100%"], include_lowest=True)
         counts = buckets.value_counts().reindex(["0–20%", "20–40%", "40–60%", "60–80%", "80–100%"], fill_value=0)
-        hist = go.Figure(go.Bar(x=counts.index, y=counts.values, marker=dict(color="#4391B4"),
+        hist = go.Figure(go.Bar(x=counts.index, y=counts.values, marker=dict(color=C["bar"]),
                                 text=counts.values, textposition="outside", textfont=dict(color=MUTED),
                                 hovertemplate="%{x}<br>%{y} signals<extra></extra>"))
         st.plotly_chart(style_fig(hist, h=300), use_container_width=True)
