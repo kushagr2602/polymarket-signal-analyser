@@ -344,6 +344,29 @@ def style_fig(fig, h=300):
 desk, news_tab, ask, brief = st.tabs(["Signal desk", "World news", "Ask the desk", "Daily brief"])
 
 with desk:
+    st.markdown('<div class="sec-h" style="margin-top:1.2rem">Signal heatmap</div>', unsafe_allow_html=True)
+    st.markdown('<div class="hint">Each tile is a market, grouped by the stock it affects. Bigger = more money traded; brighter = higher conviction.</div>', unsafe_allow_html=True)
+    hm = active.copy()
+    hm["Ticker"] = hm.Tickers.apply(lambda ts: ts[0] if ts else "Unmapped")
+    ids, labels, parents, values, colors, cd = [], [], [], [], [], []
+    for t in hm.Ticker.unique():
+        sub = hm[hm.Ticker == t]
+        ids.append(t); labels.append(t); parents.append(""); values.append(0.0)
+        colors.append(float(sub.Score.mean())); cd.append(f"{len(sub)} signals · avg {sub.Score.mean():.1f}")
+    for i, (_, r) in enumerate(hm.iterrows()):
+        ids.append(f"m{i}"); labels.append(r.Market[:26]); parents.append(r.Ticker)
+        values.append(max(float(r.Volume), 1.0)); colors.append(float(r.Score))
+        cd.append(f"{r.Score}/10 · ${r.Volume:,.0f}<br>{r.Market}")
+    tree = go.Figure(go.Treemap(
+        ids=ids, labels=labels, parents=parents, values=values, customdata=cd,
+        marker=dict(colors=colors, colorscale=C["scale"], cmin=0, cmax=10, line=dict(width=1.5, color=BG)),
+        textfont=dict(family="Archivo", color="#FDFDFD"), textposition="middle center",
+        hovertemplate="<b>%{label}</b><br>%{customdata}<extra></extra>", tiling=dict(pad=2),
+    ))
+    tree.update_layout(height=380, margin=dict(l=0, r=0, t=6, b=0),
+                       paper_bgcolor="rgba(0,0,0,0)", font=dict(family="Archivo"))
+    st.plotly_chart(tree, use_container_width=True)
+
     left, right = st.columns([1, 1.15], gap="large")
     with left:
         st.markdown('<div class="sec-h" style="margin-top:1.2rem">Sector conviction</div>', unsafe_allow_html=True)
