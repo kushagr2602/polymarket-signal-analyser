@@ -1,17 +1,16 @@
 {
   "tickers": {
-    "NVDA": "AI chips & data-center compute",
-    "TSLA": "EVs, autonomy & energy",
-    "COIN": "crypto exchange & custody",
-    "LLY": "pharma & GLP-1 franchise",
-    "JNJ": "Pharmaceuticals and consumer health",
-    "PFE": "Global biopharmaceutical company",
-    "MRK": "Research-driven pharmaceutical company",
-    "ABBV": "Biopharmaceutical company focused on immunology",
-    "UNH": "Health insurance and managed care",
-    "GILD": "Biopharmaceutical company for HIV and liver diseases",
-    "AMGN": "Biotechnology company focused on therapies",
-    "CVS": "Pharmacy and healthcare services"
+    "COIN": "Cryptocurrency exchange platform",
+    "SQ": "Mobile payment solutions provider",
+    "MARA": "Cryptocurrency mining firm",
+    "NVDA": "Leading GPU manufacturer",
+    "AMD": "Advanced microprocessor development",
+    "TSM": "Taiwan Semiconductor Manufacturing",
+    "AMGN": "Biopharmaceutical products and therapies",
+    "BMY": "Pharmaceuticals and biopharmaceuticals",
+    "AMZN": "E-commerce and cloud computing",
+    "EBAY": "Online marketplace platform",
+    "EA": "Video game publisher for FIFA series"
   },
   "sectors": [
     "AI & Semiconductors",

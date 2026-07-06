@@ -247,7 +247,12 @@ with st.sidebar:
             st.error("Keep at least one ticker and one sector.")
 
     st.divider()
-    if st.button("↻ Rescan markets", help="Re-score the top markets against the current watchlist. ~5 min; runs in the background."):
+    from src.scheduler import RESCAN_LOCK
+    rescanning = os.path.exists(RESCAN_LOCK)
+    if rescanning:
+        st.info("⏳ A rescan is already running — give it a few minutes, then hit Reload.")
+    if st.button("↻ Rescan markets", disabled=rescanning,
+                 help="Re-score the top markets against the current watchlist. ~5 min; runs in the background."):
         import subprocess
         subprocess.Popen([sys.executable, "-m", "src.scheduler", "--rescore"],
                          cwd=os.path.dirname(os.path.abspath(__file__)),

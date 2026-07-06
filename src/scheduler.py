@@ -29,21 +29,34 @@ def filter_new(limit: int = 300):
     return scored
 
 
+import os
+import tempfile
+
+RESCAN_LOCK = os.path.join(tempfile.gettempdir(), "pmsa_rescore.lock")
+
+
 def rescore(limit: int = 300):
     """Re-score the top markets by volume against the CURRENT watchlist (upsert, overwrites).
-    Use after the watchlist changes so new tickers get signals from existing markets."""
-    ingest()  # refresh prices first
-    markets = database._all_rows("markets", "*", order="volume_usd")[:limit]
-    scored = 0
-    for m in markets:
+    A lockfile prevents overlapping rescans (double-click / double-cost)."""
+    open(RESCAN_LOCK, "w").close()
+    try:
+        ingest()  # refresh prices first
+        markets = database._all_rows("markets", "*", order="volume_usd")[:limit]
+        scored = 0
+        for m in markets:
+            try:
+                database.upsert_signal(score_market(m))
+                scored += 1
+            except Exception as e:
+                print(f"  skip {m['market_id']}: {e}")
+        print(f"rescore: scored {scored}/{len(markets)} against current watchlist")
+        reports.generate_report()
+        return scored
+    finally:
         try:
-            database.upsert_signal(score_market(m))
-            scored += 1
-        except Exception as e:
-            print(f"  skip {m['market_id']}: {e}")
-    print(f"rescore: scored {scored}/{len(markets)} against current watchlist")
-    reports.generate_report()
-    return scored
+            os.remove(RESCAN_LOCK)
+        except OSError:
+            pass
 
 
 def pipeline():
