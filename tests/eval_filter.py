@@ -14,7 +14,10 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from src import config
 from src.filter import score_market
 
-TICKERS = set(config.get_watchlist()["tickers"])
+# Pin the eval to the shipped default watchlist so it's deterministic regardless of
+# whatever the live watchlist.json has been edited to (the filter reads this at score time).
+config.get_watchlist = lambda: config.DEFAULT
+TICKERS = set(config.DEFAULT["tickers"])
 
 # Cases assume the default watchlist (NVDA, TSLA, COIN, LLY) — see watchlist.json.
 # (question, min_score, max_score, must_include_ticker | None)
