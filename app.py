@@ -85,7 +85,7 @@ _root = (":root{" + "".join(f"--{k}:{C[k]};" for k in
          ("bg", "surface", "line", "line2", "hair2", "text", "muted", "soft", "accent", "sand", "rule")) + "}")
 
 st.markdown(f"<style>{_root}" + """
-@import url('https://fonts.googleapis.com/css2?family=Archivo:wght@400;500;600;700&family=Newsreader:ital,opsz,wght@0,6..72,400;0,6..72,500;1,6..72,400&family=JetBrains+Mono:wght@400;500&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Archivo:wght@400;500;600;700&family=Manrope:wght@500;600;700;800&family=Newsreader:ital,opsz,wght@0,6..72,400;0,6..72,500;1,6..72,400&family=JetBrains+Mono:wght@400;500&display=swap');
 html, body, [class*="css"] { font-family:'Archivo', Helvetica, Arial, sans-serif; color:var(--text); }
 #MainMenu, footer { visibility:hidden; }
 [data-testid="stHeader"] { background:transparent; }
@@ -345,9 +345,11 @@ desk, news_tab, ask, brief = st.tabs(["Signal desk", "World news", "Ask the desk
 
 with desk:
     st.markdown('<div class="sec-h" style="margin-top:1.2rem">Signal heatmap</div>', unsafe_allow_html=True)
-    st.markdown('<div class="hint">Each tile is a market, grouped by the stock it affects. Bigger = more money traded; brighter = higher conviction.</div>', unsafe_allow_html=True)
+    st.markdown('<div class="hint">Each tile is a market, grouped by the stock it affects. Bigger = more money traded; green = high conviction, red = weak.</div>', unsafe_allow_html=True)
+    # tradytics palette: red (weak) → teal-green (strong, their brand #26beaf), near-black tile gaps
+    TRADY = [[0, "#b23b3b"], [0.32, "#8a5a2a"], [0.6, "#2f8f6a"], [1, "#26beaf"]]
     hm = active.copy()
-    hm["Ticker"] = hm.Tickers.apply(lambda ts: ts[0] if ts else "Unmapped")
+    hm["Ticker"] = hm.Tickers.apply(lambda ts: ts[0] if ts else "Macro")
     ids, labels, parents, values, colors, cd = [], [], [], [], [], []
     for t in hm.Ticker.unique():
         sub = hm[hm.Ticker == t]
@@ -359,12 +361,12 @@ with desk:
         cd.append(f"{r.Score}/10 · ${r.Volume:,.0f}<br>{r.Market}")
     tree = go.Figure(go.Treemap(
         ids=ids, labels=labels, parents=parents, values=values, customdata=cd,
-        marker=dict(colors=colors, colorscale=C["scale"], cmin=0, cmax=10, line=dict(width=1.5, color=BG)),
-        textfont=dict(family="Archivo", color="#FDFDFD"), textposition="middle center",
-        hovertemplate="<b>%{label}</b><br>%{customdata}<extra></extra>", tiling=dict(pad=2),
+        marker=dict(colors=colors, colorscale=TRADY, cmin=5, cmax=10, line=dict(width=2, color="#0b0d0d")),
+        textfont=dict(family="Manrope", color="#FDFDFD", size=13), textposition="middle center",
+        hovertemplate="<b>%{label}</b><br>%{customdata}<extra></extra>", tiling=dict(pad=3),
     ))
-    tree.update_layout(height=380, margin=dict(l=0, r=0, t=6, b=0),
-                       paper_bgcolor="rgba(0,0,0,0)", font=dict(family="Archivo"))
+    tree.update_layout(height=400, margin=dict(l=0, r=0, t=6, b=0),
+                       paper_bgcolor="rgba(0,0,0,0)", font=dict(family="Manrope"))
     st.plotly_chart(tree, use_container_width=True)
 
     left, right = st.columns([1, 1.15], gap="large")
