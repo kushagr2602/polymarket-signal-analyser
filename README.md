@@ -7,6 +7,8 @@ serves it all through a dashboard with a tool-calling analyst agent.
 
 Built for the Google × Kaggle AI Agents Intensive capstone (Agents for Business).
 
+**[▶ Live demo](https://polymarket-signal-analyser.streamlit.app/) · [📹 Video walkthrough](https://youtu.be/bJJFs-PAE8k)**
+
 ## What it does
 
 ```

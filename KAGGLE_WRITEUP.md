@@ -3,7 +3,7 @@
 
 *Capstone — Google × Kaggle AI Agents Intensive (Vibe Coding edition, June 2026)*
 *Track: **Agents for Business** (insights generation for equity research)*
-*Kushagr Gupta · [repo link] · [video link]*
+*Kushagr Gupta · [Code](https://github.com/kushagr2602/polymarket-signal-analyser) · [Live demo](https://polymarket-signal-analyser.streamlit.app/) · [Video](https://youtu.be/bJJFs-PAE8k)*
 
 ## Course concepts demonstrated (requirement: ≥3)
 
@@ -96,7 +96,8 @@ deliberately no vector store below ~5k rows.
 
 ## Links
 
-- **Code**: [repo link — add after push]
-- **Video walkthrough**: [Loom link]
+- **Code**: https://github.com/kushagr2602/polymarket-signal-analyser
+- **Live demo**: https://polymarket-signal-analyser.streamlit.app/
+- **Video walkthrough**: https://youtu.be/bJJFs-PAE8k
 - **Run it**: `pip install -r requirements.txt`, add `.env` keys, run
   `python3 -m src.scheduler --once`, then `streamlit run app.py`.
