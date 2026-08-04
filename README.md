@@ -1,5 +1,7 @@
 # Polymarket Signal Analyser
 
+![Polymarket Signal Analyser](thumbnail.png)
+
 An agentic pipeline that scans [Polymarket](https://polymarket.com) prediction
 markets, scores each one 0–10 for relevance to **your** equity watchlist with an
 LLM, stores everything in Postgres (Supabase), writes a daily analyst brief, and
