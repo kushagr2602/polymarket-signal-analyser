@@ -5,6 +5,7 @@ from datetime import datetime, timezone
 import pandas as pd
 import plotly.graph_objects as go
 import streamlit as st
+import streamlit.components.v1 as components
 from streamlit_autorefresh import st_autorefresh
 
 # On Streamlit Cloud secrets live in st.secrets, not env vars; mirror them so the
@@ -162,7 +163,58 @@ html, body, [class*="css"] { font-family:'Archivo', Helvetica, Arial, sans-serif
 </style>""", unsafe_allow_html=True)
 
 
-@st.cache_data(ttl=600)
+def thinking_orb(label: str, size: int = 64, speed: float = 0.75, height: int = 90):
+    """Rotating dot-sphere loading indicator (self-contained canvas — no JS deps),
+    in the spirit of https://orbs.jakubantalik.com/'s ThinkingOrb."""
+    components.html(f"""
+    <div style="display:flex;align-items:center;gap:14px;height:{size}px;
+                font-family:inherit;">
+      <canvas id="orb" width="{size * 2}" height="{size * 2}"
+              style="width:{size}px;height:{size}px;"></canvas>
+      <span style="color:{C['text']};font-size:14px;letter-spacing:.02em;opacity:.8;">{label}</span>
+    </div>
+    <script>
+    (function() {{
+        const canvas = document.getElementById("orb");
+        const ctx = canvas.getContext("2d");
+        const size = {size}, dpr = window.devicePixelRatio || 1;
+        canvas.width = size * 2 * dpr; canvas.height = size * 2 * dpr;
+        ctx.scale(dpr, dpr);
+        const N = 130, pts = [];
+        for (let i = 0; i < N; i++) {{
+            const y = 1 - (i / (N - 1)) * 2, r = Math.sqrt(1 - y * y);
+            const theta = i * Math.PI * (3 - Math.sqrt(5));
+            pts.push([Math.cos(theta) * r, y, Math.sin(theta) * r]);
+        }}
+        let t = 0;
+        const speed = {speed}, color = "{C['accent']}";
+        (function frame() {{
+            t += 0.016 * speed;
+            ctx.clearRect(0, 0, size * 2, size * 2);
+            const cx = size, cy = size, R = size * 0.82;
+            const cosA = Math.cos(t), sinA = Math.sin(t);
+            const cosB = Math.cos(t * 0.6), sinB = Math.sin(t * 0.6);
+            const proj = pts.map(([x, y, z]) => {{
+                const x1 = x * cosA - z * sinA, z1 = x * sinA + z * cosA;
+                const y1 = y * cosB - z1 * sinB, z2 = y * sinB + z1 * cosB;
+                return [x1, y1, z2];
+            }}).sort((a, b) => a[2] - b[2]);
+            for (const [x, y, z] of proj) {{
+                const s = (z + 1.6) / 2.6;
+                ctx.beginPath();
+                ctx.globalAlpha = 0.2 + 0.8 * s;
+                ctx.fillStyle = color;
+                ctx.arc(cx + x * R, cy + y * R, 1.1 * s + 0.3, 0, Math.PI * 2);
+                ctx.fill();
+            }}
+            requestAnimationFrame(frame);
+        }})();
+    }})();
+    </script>
+    """, height=height)
+
+
+@st.cache_data(ttl=600, show_spinner=False)
 def load():
     db = database.get_client()
     sig = database.get_signals()  # deduped + expired-dropped in the shared layer
@@ -251,7 +303,8 @@ with st.sidebar:
     from src.scheduler import RESCAN_LOCK
     rescanning = os.path.exists(RESCAN_LOCK)
     if rescanning:
-        st.info("⏳ A rescan is already running — give it a few minutes, then hit Reload.")
+        thinking_orb("Rescanning markets…", size=28, height=44)
+        st.caption("Give it a few minutes, then hit Reload.")
     if st.button("↻ Rescan markets", disabled=rescanning,
                  help="Re-score the top markets against the current watchlist. ~5 min; runs in the background."):
         import subprocess
@@ -263,7 +316,11 @@ with st.sidebar:
         st.cache_data.clear()
         st.rerun()
 
+_orb = st.empty()
+with _orb.container():
+    thinking_orb("Loading signals…")
 sig, rep, n_markets = load()
+_orb.empty()
 df = to_df(sig)
 last_scan = max((s.get("markets") or {}).get("fetched_at", "") for s in sig) if sig else ""
 stamp = last_scan[:16].replace("T", " ") + " UTC" if last_scan else "no scans"
