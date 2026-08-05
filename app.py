@@ -355,6 +355,9 @@ st.markdown(f"""
 <div class="dek">An agentic scanner that reads prediction markets for equity signals — watching {", ".join(HOLDINGS)} (edit in the sidebar).</div>
 """, unsafe_allow_html=True)
 
+if rescanning:
+    thinking_orb("Rescanning markets against your watchlist…", size=40, height=56)
+
 with st.expander("New here? How to read this dashboard"):
     try:
         st.markdown(open(os.path.join(os.path.dirname(os.path.abspath(__file__)), "HOW_TO_READ.md")).read())
