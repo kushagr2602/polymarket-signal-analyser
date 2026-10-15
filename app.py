@@ -204,6 +204,16 @@ html, body, [class*="css"] { font-family:'Archivo', Helvetica, Arial, sans-serif
 [data-testid="stSlider"] [data-testid="stTickBarMax"], [data-testid="stSliderThumbValue"] { color:var(--text) !important; }
 [data-testid="stExpander"] details { border:1px solid var(--line); border-radius:2px; }
 ::placeholder { color:var(--muted) !important; opacity:1; }
+.hot { border-top:2px solid var(--c); padding-top:.7rem; min-height:12.2rem; }
+.hot .top { display:flex; justify-content:space-between; font-family:'JetBrains Mono', monospace;
+            font-size:.6rem; letter-spacing:.14em; text-transform:uppercase; color:var(--muted); }
+.hot .top .soon { color:var(--red); }
+.hot .nm { font-weight:700; font-size:1.08rem; margin-top:.4rem; color:var(--text); }
+.hot .bar { height:3px; background:var(--line); margin:.65rem 0 .5rem; }
+.hot .bar i { display:block; height:100%; background:var(--c); }
+.hot .st { font-family:'JetBrains Mono', monospace; font-size:.62rem; color:var(--muted); }
+.hot .lead { font-size:.84rem; line-height:1.4; color:var(--soft); margin:.65rem 0 .4rem; }
+.hot .tk { font-family:'JetBrains Mono', monospace; font-size:.6rem; color:var(--sand); }
 .st-key-filters { border-top:1px solid var(--line); border-bottom:1px solid var(--line);
     padding:1rem 0 .4rem; margin-bottom:1.1rem; }
 </style>""", unsafe_allow_html=True)
@@ -456,7 +466,55 @@ def style_fig(fig, h=300):
 
 desk, news_tab, ask, brief = st.tabs(["Signal desk", "World news", "Ask the desk", "Daily brief"])
 
+def hot_topics(d: pd.DataFrame, n: int = 6) -> list[dict]:
+    """Rank sectors by heat = Σ (conviction − 4) × log10(volume) over active signals.
+    Current concentration only — the schema keeps no history, so this is not week-over-week momentum."""
+    import math
+    a = d[(d.Score >= 5) & (d.Sector != "—")].copy()
+    if a.empty:
+        return []
+    a["w"] = (a.Score - 4) * a.Volume.clip(lower=0).add(10).apply(math.log10)
+    out = []
+    for sec, sub in a.groupby("Sector"):
+        lead = sub.sort_values(["Score", "Volume"], ascending=False).iloc[0]
+        days = pd.to_numeric(sub["Days to expiry"], errors="coerce").dropna()
+        days = days[days >= 0]
+        out.append(dict(sector=sec, w=sub.w.sum(), n=len(sub), vol=sub.Volume.sum(), peak=int(sub.Score.max()),
+                        lead=lead.Market, tk=sorted({t for ts in sub.Tickers for t in ts})[:4],
+                        soon=int(days.min()) if len(days) else None))
+    top = max(r["w"] for r in out)
+    for r in out:
+        r["heat"] = round(100 * r["w"] / top)
+    return sorted(out, key=lambda r: -r["w"])[:n]
+
+
+def _focus_sector(sector: str):
+    st.session_state["f_sector"] = [sector]
+
+
 with desk:
+    st.markdown('<div class="sec-h" style="margin-top:1.2rem">Hot topics</div>', unsafe_allow_html=True)
+    st.markdown('<div class="hint">Segments ranked by heat — how much conviction <em>and</em> money is stacked on them right now. '
+                'Start with the top row; “Filter table” narrows <a href="#all-signals" style="color:var(--accent)">All signals</a> to that segment.</div>',
+                unsafe_allow_html=True)
+    import html as _html
+    hot = hot_topics(df)
+    if not hot:
+        st.caption("No active signals to rank yet — run a scan.")
+    for row_start in range(0, len(hot), 3):
+        cols = st.columns(3, gap="medium")
+        for col, (i, r) in zip(cols, enumerate(hot[row_start:row_start + 3], start=row_start)):
+            soon = f'<span class="soon">closes in {r["soon"]}d</span>' if r["soon"] is not None and r["soon"] <= 14 else ""
+            col.markdown(
+                f'<div class="hot" style="--c:{heat(max(3, round(r["heat"] / 10)))}">'
+                f'<div class="top"><span>#{i + 1} · heat {r["heat"]}</span>{soon}</div>'
+                f'<div class="nm">{_html.escape(r["sector"])}</div>'
+                f'<div class="bar"><i style="width:{r["heat"]}%"></i></div>'
+                f'<div class="st">{r["n"]} signals · ${r["vol"] / 1e6:,.0f}M · peak {r["peak"]}/10</div>'
+                f'<div class="lead">{_html.escape(r["lead"][:90])}</div>'
+                f'<div class="tk">{" · ".join(r["tk"]) or "macro"}</div></div>', unsafe_allow_html=True)
+            col.button("Filter table →", key=f"hot_{i}", on_click=_focus_sector, args=(r["sector"],), width="stretch")
+
     st.markdown('<div class="sec-h" style="margin-top:1.2rem">Signal heatmap</div>', unsafe_allow_html=True)
     st.markdown('<div class="hint">Each tile is a market, grouped by the stock it affects. Bigger = more money traded; green = high conviction, red = weak.</div>', unsafe_allow_html=True)
     # tradytics palette: red (weak) → teal-green (strong, their brand #26beaf), near-black tile gaps
@@ -531,11 +589,11 @@ with desk:
                                 hovertemplate="%{x}<br>%{y} signals<extra></extra>"))
         st.plotly_chart(style_fig(hist, h=300), use_container_width=True)
 
-    st.markdown('<div class="sec-h">All signals</div>', unsafe_allow_html=True)
+    st.markdown('<div id="all-signals" class="sec-h">All signals</div>', unsafe_allow_html=True)
     st.markdown('<div class="hint">8–10 direct hit on a holding · 5–7 sector · 3–4 macro. Filter, then watch what expires soon.</div>', unsafe_allow_html=True)
     with st.container(key="filters"):
         fc = st.columns([1.4, 1.4, 1, 1.2], gap="medium")
-        sectors = fc[0].multiselect("Sector", sorted(df.Sector.unique()), placeholder="All sectors")
+        sectors = fc[0].multiselect("Sector", sorted(df.Sector.unique()), placeholder="All sectors", key="f_sector")
         ticker_opts = sorted({t for ts in df.Tickers for t in ts} | set(HOLDINGS))
         tickers = fc[1].multiselect("Ticker", ticker_opts, placeholder="All tickers")
         min_score = fc[2].slider("Min conviction", 0, 10, 5)
