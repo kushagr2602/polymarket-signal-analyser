@@ -1,0 +1,19 @@
+# One-click deploy on Render (https://render.com): New + → Blueprint → pick this repo.
+# Secrets are `sync: false` — Render asks for them in the dashboard; they never live in git.
+services:
+  - type: web
+    name: polymarket-signal-analyser
+    runtime: python
+    plan: free
+    buildCommand: pip install -r requirements.txt
+    startCommand: uvicorn server:app --host 0.0.0.0 --port $PORT
+    healthCheckPath: /healthz
+    envVars:
+      - key: PYTHON_VERSION   # pinned: an unpinned Python once broke the pandas wheel on the old host
+        value: "3.11.9"
+      - key: SUPABASE_URL
+        sync: false
+      - key: SUPABASE_KEY
+        sync: false
+      - key: OPENAI_API_KEY
+        sync: false

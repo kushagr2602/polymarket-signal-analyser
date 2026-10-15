@@ -42,10 +42,20 @@ scans immediately score against your book. Ships with an example set
 ```bash
 python3 -m src.scheduler --once     # one full pass: fetch → filter → report
 python3 -m src.scheduler            # hourly scans + nightly brief
-streamlit run app.py                # the dashboard
+uvicorn server:app --reload         # the web app (FastAPI + hand-built front end in web/)
+streamlit run app.py                # the original Streamlit dashboard (legacy)
 python3 -m src.mcp_server           # expose the tools over MCP (stdio)
 python3 tests/eval_filter.py        # eval the filter against the labeled set
 ```
+
+## The web app
+
+`server.py` is a thin FastAPI layer over the same modules the scanner uses; the UI in [web/](web/) is plain
+HTML/CSS/JS with no build step. Views: **Overview** (hottest segment, hot-topics ranking, heatmap, watchlist
+exposure, catalysts), **Signals** (search, sector/ticker chips and sorting, all synced to the URL), **News**,
+**Ask** (the tool-calling agent) and **Brief**. Ranking logic lives in [src/views.py](src/views.py) and is unit-tested.
+Deploy with [render.yaml](render.yaml) (set `SUPABASE_URL`, `SUPABASE_KEY`, `OPENAI_API_KEY` in the dashboard). The
+write endpoints that spend OpenAI budget are rate-limited per IP.
 
 ## Agentic design (course concepts)
 

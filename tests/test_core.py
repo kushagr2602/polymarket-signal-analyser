@@ -66,8 +66,22 @@ def test_sports_guard_leaves_finance_alone():
         assert not f.SPORTS_RE.search(q), q
 
 
+def test_hot_topics_rank_by_conviction_and_money():
+    from src import views
+    r = lambda sec, score, vol, days=30, tk=("X",): dict(score=score, volume=vol, sector=sec, days=days,
+                                                          market=f"{sec}{score}", tickers=list(tk))
+    rows = [r("Crypto", 9, 5e7, days=3), r("Crypto", 7, 1e6, days=-2), r("Pharma", 6, 1e5),
+            r("Macro", 3, 9e9), r("—", 10, 9e9)]  # score<5 and the unsorted "—" bucket never rank
+    hot = views.hot_topics(rows)
+    assert [h["sector"] for h in hot] == ["Crypto", "Pharma"], hot
+    assert hot[0]["heat"] == 100 and 0 < hot[1]["heat"] < 100, hot
+    assert hot[0]["soon"] == 3 and hot[0]["peak"] == 9 and hot[0]["lead"] == "Crypto9", hot[0]  # expired (-2d) ignored
+    ex = views.exposure(rows, {"X": "x", "Z": "z"})
+    assert ex[0]["n"] == 4 and ex[0]["peak"] == 10 and ex[1]["n"] == 0, ex  # exposure ignores sector, counts every active hit
+
+
 if __name__ == "__main__":
-    tests = [v for k, v in sorted(globals().items()) if k.startswith("test_")]
+    tests =[v for k, v in sorted(globals().items()) if k.startswith("test_")]
     for t in tests:
         t()
         print("ok", t.__name__)

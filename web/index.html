@@ -1,0 +1,55 @@
+<!doctype html>
+<html lang="en" data-theme="dark">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Polymarket Signal Analyser</title>
+<meta name="description" content="Prediction-market signals for the stocks you watch — scored by an LLM, ranked by where the money is.">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='7' fill='%230b0c0d'/%3E%3Cg fill='%2326beaf'%3E%3Crect x='6' y='6' width='6' height='6' opacity='.35'/%3E%3Crect x='13' y='6' width='6' height='6' opacity='.6'/%3E%3Crect x='20' y='6' width='6' height='6'/%3E%3Crect x='6' y='13' width='6' height='6' opacity='.6'/%3E%3Crect x='13' y='13' width='6' height='6'/%3E%3Crect x='20' y='13' width='6' height='6' opacity='.6'/%3E%3Crect x='6' y='20' width='6' height='6'/%3E%3Crect x='13' y='20' width='6' height='6' opacity='.6'/%3E%3Crect x='20' y='20' width='6' height='6' opacity='.35'/%3E%3C/g%3E%3C/svg%3E">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,500;12..96,600;12..96,700&family=Instrument+Sans:wght@400;500;600&family=Geist+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="app.css">
+<script>
+  // set the theme before first paint so there's no flash
+  try { document.documentElement.dataset.theme = localStorage.getItem('theme') || 'dark'; } catch (e) {}
+</script>
+</head>
+<body>
+<header class="top">
+  <div class="wrap top-in">
+    <a class="brand" href="#/overview" aria-label="Polymarket Signal Analyser — overview">
+      <span class="mark" aria-hidden="true"><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i></span>
+      <span class="word"><em>Polymarket</em> Signal Analyser</span>
+    </a>
+    <nav class="nav" id="nav" aria-label="Sections">
+      <a href="#/overview" data-r="overview">Overview</a>
+      <a href="#/signals" data-r="signals">Signals</a>
+      <a href="#/news" data-r="news">News</a>
+      <a href="#/ask" data-r="ask">Ask</a>
+      <a href="#/brief" data-r="brief">Brief</a>
+    </nav>
+    <div class="tools">
+      <span class="fresh" id="fresh" title="Time since the last market scan"><i></i><span>—</span></span>
+      <button class="btn" id="open-wl" type="button">Watchlist</button>
+      <button class="btn icon" id="theme" type="button" aria-label="Toggle light / dark theme" title="Toggle theme">◐</button>
+    </div>
+  </div>
+  <div class="tape" id="tape" aria-hidden="true"></div>
+</header>
+
+<main class="wrap" id="view" tabindex="-1"></main>
+
+<footer class="wrap foot">
+  <span>Markets from the Polymarket Gamma API · scored by gpt-4o-mini · not investment advice.</span>
+  <a href="https://github.com/kushagr2602/polymarket-signal-analyser" target="_blank" rel="noopener">Source on GitHub ↗</a>
+</footer>
+
+<div class="scrim" id="scrim"></div>
+<aside class="drawer" id="drawer" aria-label="Watchlist settings" aria-hidden="true"></aside>
+<div class="tip" id="tip" role="tooltip"></div>
+<div class="toast" id="toast" role="status" aria-live="polite"></div>
+
+<script src="app.js" defer></script>
+</body>
+</html>
