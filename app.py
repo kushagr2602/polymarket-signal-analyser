@@ -309,14 +309,14 @@ def to_df(sig: list[dict]) -> pd.DataFrame:
 def suggest_tickers(industry: str) -> dict:
     """LLM → up to 8 liquid, US-listed tickers central to an industry/theme, with short labels."""
     import json
-    from src.filter import client, MODEL
-    if client is None or not industry.strip():
+    from src import llm
+    if llm.client is None or not industry.strip():
         return {}
     prompt = (f'List up to 8 liquid, US-listed public-company stock tickers most central to "{industry}". '
               'No ETFs or funds. Return JSON {"tickers": {"TICKER": "3-5 word business description"}}.')
     try:
-        r = client.chat.completions.create(model=MODEL, messages=[{"role": "user", "content": prompt}],
-                                           response_format={"type": "json_object"})
+        r = llm.chat("smart", messages=[{"role": "user", "content": prompt}],
+                     response_format={"type": "json_object"})
         return {k.upper(): v for k, v in json.loads(r.choices[0].message.content).get("tickers", {}).items()}
     except Exception:
         return {}

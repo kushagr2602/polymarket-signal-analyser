@@ -2,8 +2,7 @@ import json
 import urllib.request
 import xml.etree.ElementTree as ET
 
-from . import config
-from .filter import client, MODEL
+from . import config, llm
 
 # Free RSS, no API key. Macro themes mirror the filtering contract; Yahoo covers the watchlist directly.
 MACRO = ("https://news.google.com/rss/search?q="
@@ -66,8 +65,8 @@ def assess_news() -> list[dict]:
     if not items:
         return []
     numbered = "\n".join(f"{i}. {h['title']}" for i, h in enumerate(items))
-    resp = client.chat.completions.create(
-        model=MODEL,
+    resp = llm.chat(
+        "smart",
         messages=[{"role": "user", "content": ASSESS_PROMPT.format(holdings=config.holdings_block(), headlines=numbered)}],
         response_format={"type": "json_object"},
     )

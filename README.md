@@ -76,7 +76,11 @@ write endpoints that spend OpenAI budget are rate-limited per IP.
   offset, dedupes overlapping pages, and drops already-resolved markets.
 - All reads go through one clean path (`database.get_signals`) that dedupes and
   drops expired markets — dashboard, brief, and agent see the same data.
-- The LLM *is* the filter — no brittle keyword pre-filter. A full 1,000-market
-  scan costs ~1–2 cents on `gpt-4o-mini`; the sports guard skips ~25% of calls.
+- The LLM *is* the filter — no brittle keyword pre-filter. The sports guard skips ~25% of calls.
+- **Models** are chosen in one place, [src/llm.py](src/llm.py): `gpt-6-luna` scores markets (cheapest tier, one call per
+  market) and `gpt-6.1-sol` powers the agent, brief, news read-through and ticker suggestions. Override with
+  `SCORE_MODEL` / `SMART_MODEL` (e.g. `gpt-6-astra` for the deepest agent answers) and `*_EFFORT`. If a model is
+  unavailable to your key the call degrades to `gpt-4o-mini` instead of failing; `python -m src.llm` shows what
+  answers. Re-run `python3 tests/eval_filter.py` after changing the scoring model — it is the regression gate.
 - Retrieval is a keyword-ranked pull, deliberately not a vector store — swap in
   pgvector if the signal table grows past ~5k rows.

@@ -19,7 +19,7 @@ from fastapi.middleware.gzip import GZipMiddleware
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
-from src import config, database, views
+from src import config, database, llm, views
 
 ROOT = os.path.dirname(os.path.abspath(__file__))
 app = FastAPI(title="Polymarket Signal Analyser", docs_url=None, redoc_url=None)
@@ -89,7 +89,7 @@ def state():
     wl = config.get_watchlist()
     last = max(((s.get("markets") or {}).get("fetched_at", "") for s in sig), default="")
     return {"asOf": last or None, "now": datetime.now(timezone.utc).isoformat(),
-            "rescanning": _rescanning(), "watchlist": wl,
+            "rescanning": _rescanning(), "watchlist": wl, "models": {r: llm.active(r) for r in llm.ROLES},
             "kpis": views.kpis(rows, n_markets), "signals": rows,
             "exposure": views.exposure(rows, wl["tickers"]), "hot": views.hot_topics(rows)}
 
@@ -133,14 +133,13 @@ def suggest(industry: str, request: Request):
 
     def go():
         import json
-        from src.filter import MODEL, client
-        if client is None:
+        if llm.client is None:
             return {}
         prompt = (f'List up to 8 liquid, US-listed public-company stock tickers most central to "{industry}". '
                   'No ETFs or funds. Return JSON {"tickers": {"TICKER": "3-5 word business description"}}.')
         try:
-            r = client.chat.completions.create(model=MODEL, messages=[{"role": "user", "content": prompt}],
-                                               response_format={"type": "json_object"})
+            r = llm.chat("smart", messages=[{"role": "user", "content": prompt}],
+                         response_format={"type": "json_object"})
             return {k.upper(): str(v)[:80] for k, v in json.loads(r.choices[0].message.content).get("tickers", {}).items()}
         except Exception:
             return {}

@@ -47,15 +47,15 @@ def test_expired_market_detection():
 
 
 def test_sports_guard_zeroes_without_llm():
-    from src import filter as f
-    saved, f.client = f.client, None  # guard must fire BEFORE any LLM call — no client, no luck
+    from src import filter as f, llm
+    saved, llm.client = llm.client, None  # guard must fire BEFORE any LLM call — no client, no luck
     try:
         for q in ["Will USA win the 2026 FIFA World Cup?", "Spread: United States (-1.5)",
                   "Blockx vs. Zverev: Match O/U 36.5", "Map 2: Odd/Even Total Kills?"]:
             s = f.score_market({"market_id": "x", "question": q})
             assert s["relevance_score"] == 0 and s["affected_tickers"] == [], (q, s)
     finally:
-        f.client = saved
+        llm.client = saved
 
 
 def test_sports_guard_leaves_finance_alone():
@@ -78,6 +78,43 @@ def test_hot_topics_rank_by_conviction_and_money():
     assert hot[0]["soon"] == 3 and hot[0]["peak"] == 9 and hot[0]["lead"] == "Crypto9", hot[0]  # expired (-2d) ignored
     ex = views.exposure(rows, {"X": "x", "Z": "z"})
     assert ex[0]["n"] == 4 and ex[0]["peak"] == 10 and ex[1]["n"] == 0, ex  # exposure ignores sector, counts every active hit
+
+
+def test_llm_degrades_to_fallback_but_does_not_mask_real_errors():
+    import httpx, openai
+    from src import llm
+    req = httpx.Request("POST", "http://x")
+    calls, refuse = [], {"err": openai.NotFoundError}
+
+    class C:  # fake OpenAI client: refuses every model except the fallback
+        class chat:
+            class completions:
+                @staticmethod
+                def create(model, **kw):
+                    calls.append((model, kw.get("reasoning_effort")))
+                    if model != llm.FALLBACK:
+                        raise refuse["err"]("nope", response=httpx.Response(404, request=req), body=None)
+                    return "ok"
+
+    saved, llm.client = llm.client, C
+    llm._ok.clear()
+    try:
+        assert llm.chat("score", messages=[]) == "ok"
+        assert calls[-1] == (llm.FALLBACK, None) and llm.active("score") == llm.FALLBACK, calls
+        n = len(calls)
+        llm.chat("score", messages=[])
+        assert len(calls) == n + 1, "a refused model must be remembered, not retried every call"
+        llm._ok.clear()
+        refuse["err"] = openai.RateLimitError  # a real outage / limit must surface, never silently downgrade
+        try:
+            llm.chat("score", messages=[])
+            raise AssertionError("a rate-limit error must propagate")
+        except openai.RateLimitError:
+            pass
+        assert llm.active("score") == llm.ROLES["score"][0] and calls[-1][0] == llm.ROLES["score"][0], calls
+    finally:
+        llm.client = saved
+        llm._ok.clear()
 
 
 if __name__ == "__main__":

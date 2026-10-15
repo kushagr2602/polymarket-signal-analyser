@@ -125,6 +125,7 @@ function chrome() {
   const top = [...d.signals].filter(r => r.score >= 8).sort((a, b) => b.score - a.score || b.volume - a.volume).slice(0, 16);
   const items = top.map(r => `<a class="ti" href="#/signals?q=${enc(r.market.slice(0, 70))}"><b style="--c:${conv(r.score)}">${r.score}</b>` +
     `<u>${esc(r.tickers[0] || r.sector)}</u>${esc(r.market)}</a>`).join('');
+  if (d.models) $('#models').textContent = d.models.score === d.models.smart ? d.models.score : `${d.models.score} (scoring) + ${d.models.smart} (analyst)`;
   $('#tape').innerHTML = items ? `<div class="tape-track" style="--dur:${Math.max(50, top.length * 8)}s">${items}${items}</div>` : '';
 }
 setInterval(() => { if (S.data) chrome(); }, 30000);

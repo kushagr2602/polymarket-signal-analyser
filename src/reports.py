@@ -1,8 +1,7 @@
 import json
 from datetime import date
 
-from . import config, database
-from .filter import client, MODEL  # reuse configured OpenAI client + model
+from . import config, database, llm
 
 REPORT_PROMPT = """You are a senior equity analyst writing the daily Polymarket signal brief.
 {holdings}
@@ -26,10 +25,7 @@ def generate_report(limit: int = 20) -> dict | None:
         return None
     prompt = REPORT_PROMPT.format(holdings=config.holdings_block(),
                                   signals=json.dumps(signals, indent=2, default=str))
-    resp = client.chat.completions.create(
-        model=MODEL,
-        messages=[{"role": "user", "content": prompt}],
-    )
+    resp = llm.chat("smart", messages=[{"role": "user", "content": prompt}])
     content = resp.choices[0].message.content
     report = {
         "report_date": date.today().isoformat(),

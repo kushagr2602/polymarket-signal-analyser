@@ -5,8 +5,7 @@ an agent loop, not single-shot RAG. Tool trace is returned for transparency.
 """
 import json
 
-from . import config, database
-from .filter import client, MODEL
+from . import config, database, llm
 
 MAX_TURNS = 5  # ponytail: hard cap on the loop; raise if tasks legitimately need more hops
 
@@ -78,7 +77,7 @@ def run(question: str, history: list[dict] | None = None) -> tuple[str, list[str
     msgs = [{"role": "system", "content": _system()}] + (history or []) + [{"role": "user", "content": question}]
     trace = []
     for _ in range(MAX_TURNS):
-        resp = client.chat.completions.create(model=MODEL, messages=msgs, tools=TOOLS)
+        resp = llm.chat("smart", messages=msgs, tools=TOOLS)
         msg = resp.choices[0].message
         if not msg.tool_calls:
             return msg.content or "", trace

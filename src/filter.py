@@ -1,16 +1,7 @@
-import os
 import re
 import json
-from openai import OpenAI
-from dotenv import load_dotenv
 
-from . import config
-
-load_dotenv()
-# None on a keyless checkout (e.g. CI / fresh clone) so imports and offline tests still work
-client = OpenAI() if os.getenv("OPENAI_API_KEY") else None
-
-MODEL = "gpt-4o-mini"  # ponytail: cheap+capable for scoring; bump to gpt-4o if scores look shallow
+from . import config, llm
 
 # Hard-zero guard: sports/esports markets are never relevant to an equity watchlist.
 # Catching them here also skips the LLM call entirely.
@@ -74,8 +65,8 @@ def score_market(market: dict) -> dict:
         category=market.get("category", ""),
         expiry_date=market.get("expiry_date"),
     )
-    resp = client.chat.completions.create(
-        model=MODEL,
+    resp = llm.chat(
+        "score",
         messages=[{"role": "user", "content": prompt}],
         response_format={"type": "json_object"},
     )
