@@ -160,6 +160,52 @@ html, body, [class*="css"] { font-family:'Archivo', Helvetica, Arial, sans-serif
     --gdg-text-dark:var(--text); --gdg-text-medium:var(--muted); --gdg-text-light:var(--muted);
     --gdg-bg-header:var(--surface); --gdg-bg-header-hovered:var(--line); --gdg-bg-header-has-focus:var(--line);
     --gdg-border-color:var(--line); --gdg-horizontal-border-color:var(--line2); --gdg-text-header:var(--muted); }
+
+/* ---- sidebar + filter controls: square hairline inputs, mono labels, quiet tags ---- */
+[data-testid="stSidebarContent"] { padding:1.2rem 1.25rem 2rem; }
+[data-testid="stSidebar"] hr { display:none; }
+.sb-h { font-family:'JetBrains Mono', monospace; font-size:.66rem; font-weight:500; letter-spacing:.2em;
+        text-transform:uppercase; color:var(--text); border-bottom:1px solid var(--line);
+        padding-bottom:.45rem; margin:1.7rem 0 .6rem; }
+.sb-h.first { margin-top:.4rem; }
+[data-testid="stWidgetLabel"] p { font-family:'JetBrains Mono', monospace; font-size:.6rem; font-weight:500;
+        letter-spacing:.14em; text-transform:uppercase; color:var(--muted); }
+[data-testid="stCaptionContainer"] { color:var(--muted); font-size:.74rem; line-height:1.5; }
+[data-baseweb="input"], [data-baseweb="textarea"], [data-baseweb="select"] > div:first-child {
+    background:var(--bg) !important; border:1px solid var(--line) !important; border-radius:2px !important;
+    box-shadow:none !important; }
+[data-baseweb="base-input"] { background:transparent !important; border:none !important; }
+[data-baseweb="input"]:focus-within, [data-baseweb="textarea"]:focus-within,
+[data-baseweb="select"] > div:first-child:focus-within { border-color:var(--accent) !important; }
+[data-baseweb="input"] input, [data-baseweb="textarea"] textarea, [data-baseweb="select"] input {
+    color:var(--text) !important; font-size:.86rem; }
+[data-baseweb="tag"] { background:transparent !important; border:1px solid var(--hair2); border-radius:2px !important;
+    margin:2px 4px 2px 0 !important; height:1.5rem; }
+[data-baseweb="tag"] span { color:var(--text) !important; font-family:'JetBrains Mono', monospace;
+    font-size:.66rem; letter-spacing:.04em; }
+[data-baseweb="tag"] svg { fill:var(--muted); }
+[data-baseweb="tag"]:hover { border-color:var(--accent); }
+[data-testid="stSidebar"] [data-baseweb="select"] > div:first-child { max-height:8.2rem; overflow-y:auto; }
+[data-baseweb="popover"] [data-baseweb="menu"] { background:var(--surface) !important; border:1px solid var(--line); border-radius:2px; }
+[data-baseweb="popover"] li { color:var(--text); font-size:.84rem; }
+[data-testid="stBaseButton-secondary"], [data-testid="stBaseButton-primary"] { width:100%; border-radius:2px; box-shadow:none; min-height:0; padding:.55rem .8rem;
+    background:transparent; color:var(--text); border:1px solid var(--hair2); }
+[data-testid="stBaseButton-secondary"] p, [data-testid="stBaseButton-primary"] p { font-family:'JetBrains Mono', monospace; font-size:.64rem; letter-spacing:.14em;
+    text-transform:uppercase; }
+[data-testid="stBaseButton-secondary"]:hover:not(:disabled) { border-color:var(--accent); color:var(--accent); background:transparent; }
+[data-testid="stBaseButton-primary"] { background:var(--text); color:var(--bg); border-color:var(--text); }
+[data-testid="stBaseButton-primary"]:hover:not(:disabled) { background:var(--accent); border-color:var(--accent); color:var(--bg); }
+[data-testid="stBaseButton-secondary"]:disabled, [data-testid="stBaseButton-primary"]:disabled { opacity:.38; }
+[data-testid="stSidebar"] .stButton { margin-top:.35rem; }
+/* native widgets inherit the dark base config's white text — pin them to the active palette */
+[data-baseweb="radio"] p, [data-testid="stExpander"] summary, [data-testid="stExpander"] summary p,
+[data-testid="stToolbar"], [data-testid="stToolbar"] button, [data-testid="stToolbar"] span,
+[data-testid="stSidebarCollapseButton"] button, [data-testid="stSlider"] [data-testid="stTickBarMin"],
+[data-testid="stSlider"] [data-testid="stTickBarMax"], [data-testid="stSliderThumbValue"] { color:var(--text) !important; }
+[data-testid="stExpander"] details { border:1px solid var(--line); border-radius:2px; }
+::placeholder { color:var(--muted) !important; opacity:1; }
+.st-key-filters { border-top:1px solid var(--line); border-bottom:1px solid var(--line);
+    padding:1rem 0 .4rem; margin-bottom:1.1rem; }
 </style>""", unsafe_allow_html=True)
 
 
@@ -267,9 +313,9 @@ def suggest_tickers(industry: str) -> dict:
 
 
 with st.sidebar:
-    st.radio("Theme", ["Dark", "Light"], key="theme", horizontal=True)
-    st.divider()
-    st.markdown("**Watchlist**")
+    st.markdown('<div class="sb-h first">Theme</div>', unsafe_allow_html=True)
+    st.radio("Theme", ["Dark", "Light"], key="theme", horizontal=True, label_visibility="collapsed")
+    st.markdown('<div class="sb-h">Watchlist</div>', unsafe_allow_html=True)
     st.caption("New scans score against this list. Existing signals keep their original tags.")
 
     picked = dict(WATCHLIST["tickers"])  # {ticker: desc}
@@ -290,7 +336,7 @@ with st.sidebar:
             st.caption("No new tickers found — try a broader term.")
 
     sect_text = st.text_area("Focus sectors — one per line", "\n".join(WATCHLIST["sectors"]), height=120)
-    if st.button("Save watchlist", type="primary"):
+    if st.button("Save watchlist", type="primary", width="stretch"):
         sectors = [s.strip() for s in sect_text.splitlines() if s.strip()]
         if picked and sectors:
             wcfg.save_watchlist(picked, sectors)
@@ -299,20 +345,20 @@ with st.sidebar:
         else:
             st.error("Keep at least one ticker and one sector.")
 
-    st.divider()
+    st.markdown('<div class="sb-h">Data</div>', unsafe_allow_html=True)
     from src.scheduler import RESCAN_LOCK
     rescanning = os.path.exists(RESCAN_LOCK)
     if rescanning:
         thinking_orb("Rescanning markets…", size=28, height=44)
         st.caption("Give it a few minutes, then hit Reload.")
-    if st.button("↻ Rescan markets", disabled=rescanning,
+    if st.button("↻ Rescan markets", disabled=rescanning, width="stretch",
                  help="Re-score the top markets against the current watchlist. ~5 min; runs in the background."):
         import subprocess
         subprocess.Popen([sys.executable, "-m", "src.scheduler", "--rescore"],
                          cwd=os.path.dirname(os.path.abspath(__file__)),
                          stdout=open("/tmp/rescan.log", "a"), stderr=subprocess.STDOUT)
         st.success("Rescan started — scoring the top markets against your watchlist. Give it a few minutes, then hit Reload.")
-    if st.button("⟳ Reload data"):
+    if st.button("⟳ Reload data", width="stretch"):
         st.cache_data.clear()
         st.rerun()
 
@@ -487,12 +533,13 @@ with desk:
 
     st.markdown('<div class="sec-h">All signals</div>', unsafe_allow_html=True)
     st.markdown('<div class="hint">8–10 direct hit on a holding · 5–7 sector · 3–4 macro. Filter, then watch what expires soon.</div>', unsafe_allow_html=True)
-    fc = st.columns([1.4, 1.4, 1, 1.2])
-    sectors = fc[0].multiselect("Sector", sorted(df.Sector.unique()))
-    ticker_opts = sorted({t for ts in df.Tickers for t in ts} | set(HOLDINGS))
-    tickers = fc[1].multiselect("Ticker", ticker_opts)
-    min_score = fc[2].slider("Min conviction", 0, 10, 5)
-    sort_by = fc[3].selectbox("Sort by", ["Conviction", "Volume", "Days to expiry"])
+    with st.container(key="filters"):
+        fc = st.columns([1.4, 1.4, 1, 1.2], gap="medium")
+        sectors = fc[0].multiselect("Sector", sorted(df.Sector.unique()), placeholder="All sectors")
+        ticker_opts = sorted({t for ts in df.Tickers for t in ts} | set(HOLDINGS))
+        tickers = fc[1].multiselect("Ticker", ticker_opts, placeholder="All tickers")
+        min_score = fc[2].slider("Min conviction", 0, 10, 5)
+        sort_by = fc[3].selectbox("Sort by", ["Conviction", "Volume", "Days to expiry"])
 
     view = df[df.Score >= min_score]
     if sectors:
