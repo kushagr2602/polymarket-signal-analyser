@@ -22,10 +22,10 @@ client = OpenAI() if os.getenv("OPENAI_API_KEY") else None
 
 FALLBACK = "gpt-4o-mini"
 # ponytail: defaults from OpenAI's model docs (gpt-6-luna $0.10/$0.50 per 1M tok, gpt-6.1-sol $2/$10, gpt-6-astra $10/$50).
-# Scoring on Luna keeps a full rescan at cents; SMART_MODEL=gpt-6-astra for the deepest agent answers.
+# Scoring on Sol costs roughly $1 per 300-market rescan; drop SCORE_MODEL to gpt-6-luna for cents. Astra only on the few analyst calls.
 ROLES = {
-    "score": (os.getenv("SCORE_MODEL", "gpt-6-luna"), os.getenv("SCORE_EFFORT", "low")),
-    "smart": (os.getenv("SMART_MODEL", "gpt-6.1-sol"), os.getenv("SMART_EFFORT", "low")),
+    "score": (os.getenv("SCORE_MODEL", "gpt-6.1-sol"), os.getenv("SCORE_EFFORT", "low")),
+    "smart": (os.getenv("SMART_MODEL", "gpt-6-astra"), os.getenv("SMART_EFFORT", "medium")),
 }
 _ok: dict[str, int] = {}  # role → index of the first attempt that worked, so a bad model isn't retried every call
 
