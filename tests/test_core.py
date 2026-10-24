@@ -117,6 +117,28 @@ def test_llm_degrades_to_fallback_but_does_not_mask_real_errors():
         llm._ok.clear()
 
 
+def test_market_money_math():
+    from datetime import date, timedelta
+    from src import market
+    # currency: USD and London pence both land in euros
+    assert abs(market.to_eur([["2026-01-02", 110.0]], "USD", [["2026-01-01", 1.1]])[0][1] - 100) < 1e-9  # fx forward-filled
+    assert abs(market.to_eur([["2026-01-02", 1000.0]], "GBp", [["2026-01-02", 0.8]])[0][1] - 12.5) < 1e-9
+    assert market.to_eur([["2026-01-02", 1.0]], "USD", None) == []  # no FX → excluded, never guessed
+
+    d0 = date(2022, 1, 1)
+    days = [(d0 + timedelta(days=i)).isoformat() for i in range(4 * 365 + 5)]
+    steady = [[d, 100 * 1.1 ** (i / 365)] for i, d in enumerate(days)]  # exactly +10 %/yr, never falls
+    m = market.metrics(steady)
+    assert abs(m["cagr3"] - .10) < 1e-3 and m["mdd"] == 0 and abs(m["r1y"] - .10) < 1e-3, m
+    crash = [[d, 100 if i < 400 else 50 if i < 800 else 100] for i, d in enumerate(days)]
+    assert abs(market.metrics(crash)["mdd"] + .5) < 1e-9  # halved at the worst point
+
+    rows = [{"kind": "etf", "m": market.metrics(steady)}, {"kind": "etf", "m": market.metrics(crash)}]
+    market.score(rows)
+    assert rows[0]["score"] > rows[1]["score"], rows  # steady growth beats a crash-and-flat
+    assert market.why(rows[0]).startswith("Ranks high")
+
+
 if __name__ == "__main__":
     tests =[v for k, v in sorted(globals().items()) if k.startswith("test_")]
     for t in tests:

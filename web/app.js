@@ -118,6 +118,7 @@ async function loadState(force) {
 
 /* top-bar freshness chip + ticker tape */
 function chrome() {
+  if (!S.data) return;
   const d = S.data, f = $('#fresh');
   f.classList.toggle('busy', d.rescanning);
   f.classList.toggle('stale', !d.rescanning && d.asOf && Date.now() - new Date(d.asOf) > 6 * 3600e3);
@@ -146,26 +147,32 @@ function pollRescan() {
 }
 
 /* ---------- router ---------- */
-const ROUTES = { overview: vOverview, signals: vSignals, news: vNews, ask: vAsk, brief: vBrief };
+const ROUTES = { screener: vScreener, i: vInstrument, overview: vOverview, signals: vSignals, news: vNews, ask: vAsk, brief: vBrief };
+const NEEDS_SIGNALS = new Set(['overview', 'signals', 'ask', 'brief']);  // views that read the Polymarket database
+const TITLES = { screener: 'Screener', overview: 'Predictions', signals: 'Signals', news: 'News', ask: 'Ask', brief: 'Brief' };
 function parseHash() {
-  const [p, qs = ''] = location.hash.replace(/^#\/?/, '').split('?');
-  return { path: ROUTES[p] ? p : 'overview', q: new URLSearchParams(qs) };
+  const [p0, qs = ''] = location.hash.replace(/^#\/?/, '').split('?');
+  const [p, ...rest] = p0.split('/');
+  return { path: ROUTES[p] ? p : 'screener', arg: decodeURIComponent(rest.join('/')), q: new URLSearchParams(qs) };
 }
 async function route(keepScroll) {
-  const { path, q } = parseHash();
-  $$('#nav a').forEach(a => a.classList.toggle('on', a.dataset.r === path));
+  const { path, arg, q } = parseHash();
+  $$('#nav a').forEach(a => a.classList.toggle('on', a.dataset.r === (path === 'i' ? 'screener' : path)));
   if (S.ro) { S.ro.disconnect(); S.ro = null; }
-  if (!S.data) return;
+  if (NEEDS_SIGNALS.has(path) && !S.data) {  // the screener never needs the signals database — don't let it take the app down
+    view.innerHTML = `<div class="err-card fade"><h2>Prediction signals are offline</h2><p>${esc(S.stateErr || 'Still loading…')} The screener works without them.</p><a class="btn primary" href="#/screener">Open the screener</a></div>`;
+    S.route = path; return;
+  }
   if (path === 'signals' && [...q.keys()].length) {
     S.f = { ...FDEF, sector: (q.get('sector') || '').split(',').filter(Boolean), ticker: (q.get('ticker') || '').split(',').filter(Boolean),
             min: q.has('min') ? +q.get('min') : FDEF.min, q: q.get('q') || '', sort: q.get('sort') || FDEF.sort, dir: q.has('dir') ? +q.get('dir') : FDEF.dir };
   }
   view.innerHTML = ''; view.onclick = null;  // each view installs its own delegated handler
-  await ROUTES[path](q);
+  await ROUTES[path](q, arg);
   mountOrbs(view);
   if (!keepScroll && S.route !== path) scrollTo({ top: 0, behavior: 'instant' });
   S.route = path;
-  document.title = (path === 'overview' ? '' : path[0].toUpperCase() + path.slice(1) + ' · ') + 'Polymarket Signal Analyser';
+  document.title = (path === 'i' ? arg : TITLES[path]) + ' · My Financial Scanner';
 }
 addEventListener('hashchange', () => route());
 
@@ -485,6 +492,172 @@ async function vBrief() {
   paint(0);
 }
 
+/* ---------- screener: ETFs + stocks, explained ---------- */
+const SDEF = { kind: 'etf', group: '', sort: 'score', dir: -1, q: '' };
+S.sc = { ...SDEF }; S.screen = null; S.inst = {};
+const pc = (x, signed = true) => x == null ? '—' : (signed && x > 0 ? '+' : '') + (x * 100).toFixed(Math.abs(x) < .1 ? 1 : 0) + '%';
+const tone = x => x == null ? '' : x > 0 ? 'up' : x < 0 ? 'down' : '';
+const fmtPrice = v => v >= 1000 ? Math.round(v).toLocaleString('en-US') : v.toFixed(2);
+const fmtDate = (d, long) => new Date(d + 'T12:00:00').toLocaleDateString('en-GB', long ? { day: 'numeric', month: 'short', year: 'numeric' } : { month: 'short', year: 'numeric' });
+const PART_LABEL = { rpr: 'Return for the risk', growth: 'Growth per year', mdd: 'Smaller worst fall', r1y: 'Last 12 months' };
+const SC_SORTS = [['score', 'Overall score', -1], ['r1y', 'Last 12 months', -1], ['growth', 'Growth per year', -1], ['rpr', 'Return for the risk', -1],
+                  ['mdd', 'Smallest worst fall', -1], ['vol', 'Calmest (lowest swing)', 1], ['r6m', 'Hot lately (6 months)', -1]];
+const LEARN = [
+  ['ETF vs stock', 'An ETF is one share that holds hundreds or thousands of companies, so one company failing barely matters. A stock is a single company: more upside, and more can go wrong.'],
+  ['Growth per year', 'The average yearly increase, with dividends reinvested. +8% a year turns €1,000 into about €1,470 after 5 years. Three years or more says far more than any single year.'],
+  ['Swing (volatility)', 'How much the price typically jumps around in a year. A world fund swings ~15%, bonds ~5%, a single tech stock 40%+. Bigger swings mean a bumpier ride, not necessarily a worse investment.'],
+  ['Worst fall (drawdown)', 'The biggest drop from a high to the low that followed. −30% means €1,000 briefly became €700. The real question: would you have held on, or sold at the bottom?'],
+  ['Return for the risk', 'Growth divided by swing: how much reward you got per unit of bumpiness. Above 1 is excellent, below 0.5 is a lot of stress for the reward. Professionals call a version of this the Sharpe ratio.'],
+];
+
+async function vScreener() {
+  let learnOpen = true; try { learnOpen = localStorage.getItem('learn') !== 'closed'; } catch (e) { /* private mode */ }
+  view.innerHTML = `
+  <div class="page-h fade"><div class="eyebrow">Screener</div><h1>Funds and stocks, ranked and explained</h1>
+    <p>Ranked on what matters to a long-term investor: steady growth, growth per year, how deep it fell, and the last 12 months. Everything is in euros. A starting point for your own research, not advice.</p></div>
+  <details class="learn"${learnOpen ? ' open' : ''}><summary>New to this? The numbers, in plain English</summary>
+    <div class="learn-grid">${LEARN.map(([h, b]) => `<div><h4>${h}</h4><p>${b}</p></div>`).join('')}</div>
+    <p class="learn-score"><b>The score (0–100)</b> ranks each one against the others of its type in this list, using growth, swing, worst fall and the last year. 80 means it beat about 80% of them. Bonds and gold are built to be steady rather than to grow fast, so compare them with each other using the group filter.</p></details>
+  <div class="fbar" id="sbar"></div>
+  <div class="res-meta"><span id="count"></span><span id="asof"></span></div>
+  <div id="res"><div class="loading sm">${orbHTML(56, 'Fetching 5 years of prices…')}</div></div>`;
+  mountOrbs(view);
+  $('details.learn', view).ontoggle = e => { try { localStorage.setItem('learn', e.target.open ? 'open' : 'closed'); } catch (_) { /* fine */ } };
+  if (!S.screen) {
+    try { S.screen = await api('/api/screen'); }
+    catch (e) { if ($('#res')) $('#res').innerHTML = `<div class="empty">Couldn’t load market data: ${esc(e.message)}</div>`; return; }
+  }
+  if (!$('#res')) return;  // navigated away while loading
+  scBar(); scList();
+  view.onclick = e => {
+    const k = e.target.closest('#kind button'); if (k) { S.sc = { ...S.sc, kind: k.dataset.k, group: '' }; scBar(); return scList(); }
+    const g = e.target.closest('[data-g]'); if (g) { S.sc.group = g.dataset.g; scBar(); return scList(); }
+  };
+}
+
+function scBar() {
+  const s = S.sc, rows = S.screen.rows, mine = rows.filter(r => r.kind === s.kind), groups = {};
+  mine.forEach(r => { groups[r.group] = (groups[r.group] || 0) + 1; });
+  $('#sbar').innerHTML = `<div class="frow">
+      <div class="seg" id="kind" role="group" aria-label="Type">${[['etf', 'ETFs & ETCs'], ['stock', 'Stocks']].map(([k, l]) => `<button type="button" data-k="${k}" class="${s.kind === k ? 'on' : ''}">${l} <small>${rows.filter(r => r.kind === k).length}</small></button>`).join('')}</div>
+      <label class="search"><svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6"><circle cx="7" cy="7" r="5"/><path d="m11 11 3.5 3.5"/></svg>
+        <input class="in" id="q" type="search" placeholder="Search by name or ticker" value="${esc(s.q)}" autocomplete="off" aria-label="Search"><kbd>/</kbd></label>
+      <select class="in" id="sort" aria-label="Sort by">${SC_SORTS.map(([k, l]) => `<option value="${k}"${s.sort === k ? ' selected' : ''}>Sort: ${l}</option>`).join('')}</select>
+    </div>
+    <div class="chips"><span class="lab">Group</span><button class="cf${!s.group ? ' on' : ''}" data-g="" type="button">All <small>${mine.length}</small></button>${Object.entries(groups).map(([g, n]) => `<button class="cf${s.group === g ? ' on' : ''}" data-g="${esc(g)}" type="button">${esc(g)} <small>${n}</small></button>`).join('')}</div>`;
+  $('#q').oninput = e => { s.q = e.target.value; scList(); };
+  $('#sort').onchange = e => { const x = SC_SORTS.find(z => z[0] === e.target.value); s.sort = x[0]; s.dir = x[2]; scList(); };
+}
+
+function scList() {
+  const s = S.sc, q = s.q.trim().toLowerCase(), val = r => s.sort === 'score' ? r.score : r.m[s.sort];
+  const rows = S.screen.rows.filter(r => r.kind === s.kind && (!s.group || r.group === s.group) && (!q || (r.name + ' ' + r.t).toLowerCase().includes(q)))
+    .sort((a, b) => { const x = val(a), y = val(b); return x == null ? 1 : y == null ? -1 : (x - y) * s.dir || b.score - a.score; });
+  $('#count').textContent = `${rows.length} ${s.kind === 'etf' ? 'funds' : 'stocks'} · ${SC_SORTS.find(z => z[0] === s.sort)[1].toLowerCase()}`;
+  $('#asof').textContent = `Prices as of ${fmtDate(S.screen.asOf, true)} · Yahoo Finance`;
+  const h = (l, tip, cls = '') => `<span class="num ${cls}" data-tip="${esc(tip)}">${l}</span>`;
+  $('#res').innerHTML = `<div class="sr sr-h"><span>#</span><span>Name</span><span data-tip="0–100: how it compares with the others of its type in this list. Hover a row's numbers for what they mean.">Score</span>
+      ${h('1 yr', 'Change over the last 12 months, in euros.')}${h('Per yr', 'Average growth per year over 3 years (* = less history, last 12 months used).', 'col-g')}
+      ${h('Swing', 'Volatility: how much it typically moves in a year. ~15% is like the whole stock market.', 'col-v')}${h('Worst fall', 'Biggest drop from a high in the last 3 years.', 'col-d')}
+      ${h('Ret/risk', 'Growth per unit of swing. Above 1 excellent, below 0.5 a bumpy ride for the reward.', 'col-r')}</div>` +
+    (rows.map((r, i) => `<a class="sr" href="#/i/${enc(r.t)}">
+      <span class="sr-rank">${i + 1}</span>
+      <span class="sr-name"><b>${esc(r.name)}</b><span class="sr-meta">${esc(r.t)} · ${esc(r.group)}${r.tags.map(t => ` · <i>${esc(t)}</i>`).join('')}</span><span class="sr-why">${esc(r.why)}</span></span>
+      <span class="sr-score"><span class="track"><i style="width:${r.score}%;--c:${conv(5 + r.score / 20)}"></i></span><b>${r.score}</b></span>
+      <span class="num ${tone(r.m.r1y)}">${pc(r.m.r1y)}</span>
+      <span class="num col-g ${tone(r.m.growth)}">${pc(r.m.growth)}${r.m.short ? '*' : ''}</span>
+      <span class="num col-v">${pc(r.m.vol, false)}</span><span class="num col-d">${pc(r.m.mdd)}</span>
+      <span class="num col-r">${r.m.rpr == null ? '—' : r.m.rpr.toFixed(2)}</span></a>`).join('') || '<div class="empty">Nothing matches. Clear the search or pick another group.</div>');
+}
+
+async function vInstrument(q, t) {
+  view.innerHTML = `<div class="loading sm">${orbHTML(56, 'Loading…')}</div>`; mountOrbs(view);
+  let r = S.inst[t];
+  if (!r) {
+    try { r = S.inst[t] = await api('/api/instrument/' + enc(t)); }
+    catch (e) { view.innerHTML = `<div class="err-card fade"><h2>Couldn’t load ${esc(t)}</h2><p>${esc(e.message)}</p><a class="btn primary" href="#/screener">Back to the screener</a></div>`; return; }
+  }
+  if (parseHash().arg !== t) return;
+  const m = r.m, kindL = r.kind === 'stock' ? 'Stock' : r.group === 'Gold' ? 'ETC' : 'ETF', noun = r.kind === 'etf' ? 'funds' : 'stocks';
+  const parts = Object.entries(r.parts).map(([k, v]) => `<div class="pp"><div class="pp-l"><span>${PART_LABEL[k]}</span><b>beats ${Math.round(v * 100)}%</b></div>
+    <div class="pp-t"><i style="width:${Math.max(2, v * 100)}%;--c:${conv(5 + v * 5)}"></i></div></div>`).join('');
+  view.innerHTML = `
+  <a class="back" href="#/screener">← Screener</a>
+  <div class="ih fade">
+    <div><div class="eyebrow">${esc(r.group)} · ${kindL} · ${esc(r.t)}</div><h1>${esc(r.name)}</h1>
+      <p class="ih-sub"><b>€${fmtPrice(m.price)}</b> <span class="${tone(m.r1d)}">${pc(m.r1d)} on the day</span> · as of ${fmtDate(m.asof, true)}${r.ccy !== 'EUR' ? ` · converted from ${r.ccy === 'GBp' ? 'GBP' : esc(r.ccy)}` : ''}</p>
+      <p class="ih-why">${esc(r.why)}</p></div>
+    <div class="ih-score"><div class="big" style="color:${conv(5 + r.score / 20)}">${r.score}</div><div class="l">score / 100</div><div class="rk">#${r.rank} of ${r.of} ${noun} here</div></div>
+  </div>
+  <div class="card chart-card"><div class="chart-top"><div class="readout" id="ro"></div>
+    <div class="seg" id="rng" role="group" aria-label="Chart range">${['6M', '1Y', '3Y', '5Y'].map(x => `<button type="button" data-r="${x}" class="${x === '3Y' ? 'on' : ''}">${x}</button>`).join('')}</div></div>
+    <svg class="pchart" id="pc" role="img" aria-label="Price chart in euros"></svg></div>
+  <div class="grid2" style="margin-top:28px">
+    <div class="card"><h3>Year by year</h3><p class="sub">Each calendar year's return in euros (${new Date().getFullYear()} = so far this year). Real investments zig-zag; this is what that looks like.</p>${yearBars(m.years)}</div>
+    <div class="card"><h3>Why it scores ${r.score}</h3><p class="sub">Each bar is the share of the other ${noun} in this list that it beats on that measure.</p>${parts}</div>
+  </div>
+  <div class="sh"><h2>The numbers, in plain English</h2></div>
+  <div class="xcards">${r.cards.map(c => `<div class="xc ${c.tone}"><div class="xc-top"><span>${esc(c.label)}</span><b>${esc(c.value)}</b></div><p>${esc(c.plain)}</p></div>`).join('')}</div>
+  <div class="card" style="margin-top:28px"><h3>Explain it like I’m new</h3><p class="sub">An AI write-up from only the numbers on this page: what it is, how it behaved, the main risk, and who it usually suits.</p>
+    <div id="ai">${r.ai ? aiHTML(r.ai) : '<button class="btn primary" id="ai-go" type="button">Explain this for me</button>'}</div></div>
+  <p class="disc">Past performance doesn’t predict future returns. This page helps you understand an investment; it isn’t a recommendation to buy or sell.</p>`;
+  let range = '3Y';
+  const draw = () => priceChart(r.series, range);
+  draw();
+  S.ro = new ResizeObserver(() => { clearTimeout(S.rt); S.rt = setTimeout(draw, 100); }); S.ro.observe($('#pc'));
+  $('#rng').onclick = e => { const b = e.target.closest('button'); if (!b) return; range = b.dataset.r; $$('#rng button').forEach(x => x.classList.toggle('on', x === b)); draw(); };
+  const go = $('#ai-go');
+  if (go) go.onclick = async () => {
+    const box = $('#ai'); box.innerHTML = `<div class="thinking">${orbHTML(36)}<span>Writing a plain-English explanation…</span></div>`; mountOrbs(box);
+    try { r.ai = await api('/api/explain/' + enc(t), { method: 'POST' }); if ($('#ai')) $('#ai').innerHTML = aiHTML(r.ai); }
+    catch (e) { if ($('#ai')) $('#ai').innerHTML = `<div class="empty">${esc(e.message)}</div>`; }
+  };
+}
+const aiHTML = x => `<div class="prose">${md(x.text)}</div><div class="hint">Written by ${esc(x.model)} from the numbers on this page.</div>`;
+
+function yearBars(years) {
+  const e = Object.entries(years || {});
+  if (!e.length) return '<div class="empty">Not enough history yet.</div>';
+  const mx = Math.max(.01, ...e.map(([, v]) => Math.abs(v)));
+  return `<div class="yb">${e.map(([y, v]) => `<div class="yb-c"><span class="yb-v ${tone(v)}">${pc(v)}</span>
+    <div class="yb-t"><i class="${v >= 0 ? 'pos' : 'neg'}" style="height:${Math.abs(v) / mx * 50}%"></i></div><span class="yb-y">${y}</span></div>`).join('')}</div>`;
+}
+
+function priceChart(series, range) {
+  const svg = $('#pc'); if (!svg || series.length < 2) return;
+  const days = { '6M': 182, '1Y': 365, '3Y': 1095, '5Y': 1830 }[range];
+  const start = new Date(new Date(series[series.length - 1][0]) - days * 864e5).toISOString().slice(0, 10);
+  let pts = series.filter(p => p[0] >= start); if (pts.length < 2) pts = series;
+  const step = Math.ceil(pts.length / 500); if (step > 1) pts = pts.filter((_, i) => i % step === 0 || i === pts.length - 1);
+  const W = svg.clientWidth, H = svg.clientHeight, M = { l: 6, r: 62, t: 14, b: 26 };
+  svg.setAttribute('viewBox', `0 0 ${W} ${H}`);
+  const ys = pts.map(p => p[1]); let lo = Math.min(...ys), hi = Math.max(...ys); const pad = (hi - lo) * .08 || 1; lo -= pad; hi += pad;
+  const X = i => M.l + i / (pts.length - 1) * (W - M.l - M.r), Y = v => M.t + (hi - v) / (hi - lo) * (H - M.t - M.b);
+  const base = pts[0][1], last = pts[pts.length - 1][1], up = last >= base, col = up ? 'var(--teal)' : 'var(--red)';
+  const line = pts.map((p, i) => `${i ? 'L' : 'M'}${X(i).toFixed(1)},${Y(p[1]).toFixed(1)}`).join('');
+  let g = '';
+  for (let k = 0; k <= 3; k++) { const v = lo + (hi - lo) * (k + .5) / 4; g += `<line x1="${M.l}" x2="${W - M.r}" y1="${Y(v)}" y2="${Y(v)}" stroke="var(--line2)"/><text x="${W - M.r + 10}" y="${Y(v) + 4}">€${fmtPrice(v)}</text>`; }
+  [0, Math.floor((pts.length - 1) / 2), pts.length - 1].forEach((i, k) => { g += `<text x="${X(i)}" y="${H - 6}" text-anchor="${['start', 'middle', 'end'][k]}">${fmtDate(pts[i][0])}</text>`; });
+  svg.innerHTML = `<defs><linearGradient id="pg" x1="0" x2="0" y1="0" y2="1"><stop offset="0" style="stop-color:${col};stop-opacity:.22"/><stop offset="1" style="stop-color:${col};stop-opacity:0"/></linearGradient></defs>${g}
+    <line x1="${M.l}" x2="${W - M.r}" y1="${Y(base)}" y2="${Y(base)}" stroke="var(--muted)" stroke-dasharray="2 4" opacity=".6"/>
+    <path d="${line}L${X(pts.length - 1)},${H - M.b}L${X(0)},${H - M.b}Z" fill="url(#pg)"/><path d="${line}" fill="none" stroke="${col}" stroke-width="2" stroke-linejoin="round"/>
+    <line id="cx" y1="${M.t}" y2="${H - M.b}" stroke="var(--muted)" stroke-dasharray="3 3" opacity="0"/><circle id="cd" r="4.5" fill="${col}" stroke="var(--surface)" stroke-width="2" opacity="0"/>
+    <rect id="hit" x="${M.l}" y="0" width="${W - M.l - M.r}" height="${H}" fill="transparent"/>`;
+  const ro = $('#ro'), cx = $('#cx', svg), cd = $('#cd', svg), eur = p => `€${Math.round(1000 * p / base).toLocaleString('en-US')}`;
+  const rest = () => { cx.setAttribute('opacity', 0); cd.setAttribute('opacity', 0);
+    ro.innerHTML = `€1,000 put in on ${fmtDate(pts[0][0], true)} is worth <b class="${tone(last / base - 1)}">${eur(last)}</b> today <span class="${tone(last / base - 1)}">(${pc(last / base - 1)})</span>`; };
+  rest();
+  const hit = $('#hit', svg);
+  hit.onmousemove = e => {
+    const b = svg.getBoundingClientRect(), x = (e.clientX - b.left) * (W / b.width);
+    const i = Math.max(0, Math.min(pts.length - 1, Math.round((x - M.l) / (W - M.l - M.r) * (pts.length - 1)))), p = pts[i];
+    cx.setAttribute('x1', X(i)); cx.setAttribute('x2', X(i)); cx.setAttribute('opacity', 1);
+    cd.setAttribute('cx', X(i)); cd.setAttribute('cy', Y(p[1])); cd.setAttribute('opacity', 1);
+    ro.innerHTML = `<b>${fmtDate(p[0], true)}</b> · €${fmtPrice(p[1])} · €1,000 from the start of this chart → <b class="${tone(p[1] / base - 1)}">${eur(p[1])}</b>`;
+  };
+  hit.onmouseleave = rest;
+}
+
 /* ---------- watchlist drawer ---------- */
 const drawer = $('#drawer'), scrim = $('#scrim');
 let W = null;
@@ -539,7 +712,7 @@ drawer.addEventListener('submit', async e => {
   W.finding = false; paintDrawer(); $('#ind', drawer).value = q;
 });
 scrim.onclick = closeDrawer;
-$('#open-wl').onclick = openDrawer;
+$('#open-wl').onclick = () => S.data ? openDrawer() : toast('The prediction watchlist needs the signals database.', true);
 $('#theme').onclick = () => {
   const n = theme() === 'dark' ? 'light' : 'dark'; document.documentElement.dataset.theme = n;
   try { localStorage.setItem('theme', n); } catch (e) { /* private mode */ }
@@ -549,16 +722,14 @@ addEventListener('keydown', e => {
   if (e.key === 'Escape') closeDrawer();
   if (e.key === '/' && !/INPUT|TEXTAREA|SELECT/.test(document.activeElement.tagName)) {
     e.preventDefault();
-    if (parseHash().path !== 'signals') location.hash = '#/signals';
+    if (!$('#q')) location.hash = '#/screener';
     setTimeout(() => $('#q') && $('#q').focus(), 60);
   }
 });
 
 /* ---------- boot ---------- */
 (async function boot() {
-  view.innerHTML = `<div class="loading">${orbHTML(72, 'Loading signals…')}</div>`; mountOrbs(view);
-  try { await loadState(); pollRescan(); route(); }
-  catch (e) {
-    view.innerHTML = `<div class="err-card fade"><h2>Couldn’t load the signals</h2><p>${esc(e.message)} Check that the database keys are set, then try again.</p><button class="btn primary" onclick="location.reload()">Retry</button></div>`;
-  }
+  view.innerHTML = `<div class="loading">${orbHTML(72, 'Loading…')}</div>`; mountOrbs(view);
+  try { await loadState(); pollRescan(); } catch (e) { S.stateErr = e.message; }  // signals optional; screener still runs
+  route();
 })();

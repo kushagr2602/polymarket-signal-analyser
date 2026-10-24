@@ -182,4 +182,54 @@ def reload():
     return {"ok": True}
 
 
+# ---------------------------------------------------------------- screener (ETFs + stocks)
+
+@app.get("/api/screen")
+def screen():
+    from src import market
+
+    def go():
+        data = market.load()
+        rows = market.screen(data)
+        return {"asOf": max((r["m"]["asof"] for r in rows), default=None), "fetched": data["fetched"],
+                "rows": [{k: r[k] for k in ("t", "kind", "group", "name", "ccy", "score", "parts", "why", "tags")}
+                         | {"m": {k: v for k, v in r["m"].items() if k != "years"}} for r in rows]}
+    return cached("screen", 600, go)
+
+
+@app.get("/api/instrument/{ticker}")
+def instrument(ticker: str):
+    from src import market
+    r = market.instrument(market.load(), ticker.upper())
+    if not r:
+        raise HTTPException(404, "Not in the screener universe.")
+    return r
+
+
+@app.post("/api/explain/{ticker}")
+def explain(ticker: str, request: Request):
+    """Beginner-friendly write-up of one instrument, from the computed numbers only (cached per day)."""
+    from src import market
+    r = market.instrument(market.load(), ticker.upper())
+    if not r:
+        raise HTTPException(404, "Not in the screener universe.")
+    if llm.client is None:
+        raise HTTPException(503, "No OpenAI key configured.")
+    limit(request, "explain", 20)
+
+    def go():
+        facts = "\n".join(f"- {c['label']}: {c['value']} — {c['plain']}" for c in r["cards"])
+        prompt = (f"You explain investments to a complete beginner who finds financial concepts hard.\n"
+                  f"Instrument: {r['name']} ({r['t']}), a {'fund (ETF)' if r['kind'] == 'etf' else 'single company stock'}, "
+                  f"category: {r['group']}. Screener score {r['score']}/100 (rank {r['rank']} of {r['of']} {r['kind']}s here): {r['why']}\n"
+                  f"Facts, all in euros:\n{facts}\n\n"
+                  "Write at most 150 words in plain English, in four short parts with bold lead-ins: **What it is**, "
+                  "**How it has behaved**, **The main risk**, **Who it usually suits**. Explain any term you use. "
+                  "Use only the facts given. Never tell the reader to buy or sell, and end with one sentence reminding "
+                  "them that past performance doesn't predict future returns.")
+        resp = llm.chat("smart", messages=[{"role": "user", "content": prompt}])
+        return {"text": resp.choices[0].message.content, "model": llm.active("smart")}
+    return cached(f"explain:{r['t']}:{r['m']['asof']}", 86400, go)
+
+
 app.mount("/", StaticFiles(directory=os.path.join(ROOT, "web"), html=True), name="web")

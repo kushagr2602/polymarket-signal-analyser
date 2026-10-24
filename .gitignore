@@ -7,3 +7,4 @@ __pycache__/
 .claude/
 .streamlit/secrets.toml
 src/test_db.py
+data/
