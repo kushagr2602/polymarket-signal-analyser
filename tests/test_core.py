@@ -139,6 +139,32 @@ def test_market_money_math():
     assert market.why(rows[0]).startswith("Ranks high")
 
 
+def test_portfolio_average_cost_and_csv():
+    from src import portfolio as pf
+    t = lambda d, side, q, p, f=0: pf.clean({"date": d, "ticker": "VWCE.DE", "side": side, "qty": q, "price": p, "fees": f})
+    trades = [t("2024-01-02", "buy", 10, 100, 1), t("2024-06-03", "buy", 10, 120, 1), t("2025-01-02", "sell", 5, 150, 1)]
+    p = pf.positions(trades)["VWCE.DE"]
+    assert abs(p["qty"] - 15) < 1e-9
+    avg = (10 * 100 + 1 + 10 * 120 + 1) / 20                       # 110.10 per share, fees included
+    assert abs(p["realized"] - (5 * (150 - avg) - 1)) < 1e-9       # sold 5 above average cost, minus the fee
+    assert abs(p["cost"] - avg * 15) < 1e-9
+    try:
+        pf.positions(trades + [t("2025-02-01", "sell", 99, 1)])
+        raise AssertionError("selling more than you hold must be refused")
+    except ValueError as e:
+        assert "only hold" in str(e)
+    # German-style export: ; separated, day-first dates, decimal commas, German headers, sells as negative qty
+    rows, errs = pf.parse_csv("Datum;Wertpapier;Anzahl;Kurs;Gebühr\n14.03.2025;vwce.de;3;1.234,50;1,00\n15.03.2025;AAPL;-2;180,5;0\n")
+    assert not errs, errs
+    assert rows[0]["date"] == "2025-03-14" and rows[0]["ticker"] == "VWCE.DE" and rows[0]["price"] == 1234.5 and rows[0]["fees"] == 1.0
+    assert rows[1]["side"] == "sell" and rows[1]["qty"] == 2
+    _, errs = pf.parse_csv("foo,bar\n1,2\n")
+    assert errs and "Couldn't find" in errs[0]
+    # today's mix, forward-filled across a day one exchange was closed
+    mix = pf.mix_series({"A": 2, "B": 1}, {"A": [["2025-01-01", 10], ["2025-01-02", 11]], "B": [["2025-01-01", 5]]})
+    assert mix == [["2025-01-01", 25], ["2025-01-02", 27]], mix
+
+
 if __name__ == "__main__":
     tests =[v for k, v in sorted(globals().items()) if k.startswith("test_")]
     for t in tests:

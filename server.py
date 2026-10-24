@@ -232,4 +232,89 @@ def explain(ticker: str, request: Request):
     return cached(f"explain:{r['t']}:{r['m']['asof']}", 86400, go)
 
 
+# ---------------------------------------------------------------- portfolio (local only)
+
+def local_only(request: Request):
+    """Your trades never leave this machine: refuse anything that isn't a direct localhost request
+    (a hosted deploy sits behind a proxy, which always adds X-Forwarded-For)."""
+    host = request.client.host if request.client else ""
+    if request.headers.get("x-forwarded-for") or host not in ("127.0.0.1", "::1"):
+        raise HTTPException(403, "Your portfolio only opens when the app runs on your own computer.")
+
+
+def _portfolio():
+    from src import market, portfolio
+    data = market.load()
+    return portfolio.analyse(portfolio.load(), data, market.screen(data))
+
+
+@app.get("/api/portfolio")
+def get_portfolio(request: Request):
+    local_only(request)
+    return _portfolio()
+
+
+class Trade(BaseModel):
+    date: str
+    ticker: str
+    side: str = "buy"
+    qty: str | float
+    price: str | float
+    fees: str | float = 0
+    note: str = ""
+
+
+@app.post("/api/trades")
+def add_trade(body: Trade, request: Request):
+    local_only(request)
+    from src import portfolio
+    try:
+        portfolio.save(portfolio.load() + [portfolio.clean(body.model_dump())])
+    except ValueError as e:
+        raise HTTPException(400, str(e))
+    return _portfolio()
+
+
+@app.delete("/api/trades/{tid}")
+def delete_trade(tid: str, request: Request):
+    local_only(request)
+    from src import portfolio
+    try:
+        portfolio.save([t for t in portfolio.load() if t["id"] != tid])
+    except ValueError as e:  # e.g. deleting a buy that a later sell depends on
+        raise HTTPException(400, f"Can't delete that trade: {e}")
+    return _portfolio()
+
+
+class CsvImport(BaseModel):
+    csv: str
+
+
+@app.post("/api/trades/import")
+def import_trades(body: CsvImport, request: Request):
+    local_only(request)
+    if len(body.csv) > 2_000_000:
+        raise HTTPException(413, "That file is too large.")
+    from src import portfolio
+    rows, errs = portfolio.parse_csv(body.csv)
+    have = portfolio.load()
+    key = lambda t: (t["date"], t["ticker"], t["side"], round(t["qty"], 8), round(t["price"], 6))
+    seen = {key(t) for t in have}
+    new = [t for t in rows if key(t) not in seen]  # re-importing the same export must not double your holdings
+    if new:
+        try:
+            portfolio.save(have + new)
+        except ValueError as e:
+            raise HTTPException(400, str(e))
+    return {"added": len(new), "skipped": len(rows) - len(new), "errors": errs[:20], "portfolio": _portfolio()}
+
+
+@app.get("/api/trades/template.csv")
+def trades_template():
+    from fastapi.responses import PlainTextResponse
+    return PlainTextResponse("date,ticker,side,qty,price,fees,note\n2025-01-15,VWCE.DE,buy,10,118.40,1.00,monthly plan\n"
+                             "2025-03-03,ASML.AS,buy,2,640.00,1.00,\n", media_type="text/csv",
+                             headers={"Content-Disposition": "attachment; filename=trades-template.csv"})
+
+
 app.mount("/", StaticFiles(directory=os.path.join(ROOT, "web"), html=True), name="web")

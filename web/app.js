@@ -147,9 +147,9 @@ function pollRescan() {
 }
 
 /* ---------- router ---------- */
-const ROUTES = { screener: vScreener, i: vInstrument, overview: vOverview, signals: vSignals, news: vNews, ask: vAsk, brief: vBrief };
+const ROUTES = { screener: vScreener, i: vInstrument, portfolio: vPortfolio, overview: vOverview, signals: vSignals, news: vNews, ask: vAsk, brief: vBrief };
 const NEEDS_SIGNALS = new Set(['overview', 'signals', 'ask', 'brief']);  // views that read the Polymarket database
-const TITLES = { screener: 'Screener', overview: 'Predictions', signals: 'Signals', news: 'News', ask: 'Ask', brief: 'Brief' };
+const TITLES = { screener: 'Screener', portfolio: 'Portfolio', overview: 'Predictions', signals: 'Signals', news: 'News', ask: 'Ask', brief: 'Brief' };
 function parseHash() {
   const [p0, qs = ''] = location.hash.replace(/^#\/?/, '').split('?');
   const [p, ...rest] = p0.split('/');
@@ -656,6 +656,109 @@ function priceChart(series, range) {
     ro.innerHTML = `<b>${fmtDate(p[0], true)}</b> · €${fmtPrice(p[1])} · €1,000 from the start of this chart → <b class="${tone(p[1] / base - 1)}">${eur(p[1])}</b>`;
   };
   hit.onmouseleave = rest;
+}
+
+/* ---------- portfolio (local only) ---------- */
+const euro = (n, signed) => n == null ? '—' : (signed && n > 0 ? '+' : n < 0 ? '−' : '') + '€' + Math.abs(n).toLocaleString('en-US', { maximumFractionDigits: Math.abs(n) >= 1000 ? 0 : 2, minimumFractionDigits: Math.abs(n) >= 1000 ? 0 : 2 });
+const today = () => new Date().toISOString().slice(0, 10);
+
+async function vPortfolio() {
+  view.innerHTML = `<div class="page-h fade"><div class="eyebrow">Portfolio</div><h1>Your portfolio, explained</h1>
+    <p>Add your trades to see what you own, how it’s doing, and how today’s mix would have behaved, in plain English. Stored only on this computer and never uploaded.</p></div>
+    <div id="pf"><div class="loading sm">${orbHTML(56, 'Loading your portfolio…')}</div></div>`;
+  mountOrbs(view);
+  try { [S.pf] = await Promise.all([api('/api/portfolio'), S.screen ? null : api('/api/screen').then(x => { S.screen = x; }).catch(() => null)]); }
+  catch (e) {
+    if ($('#pf')) $('#pf').innerHTML = `<div class="err-card"><h2>Portfolio is private</h2><p>${esc(e.message)} Run the app on your laptop (<code>uvicorn server:app</code>) and open it at localhost.</p></div>`;
+    return;
+  }
+  if ($('#pf')) pfPaint();
+}
+
+function tradeForm() {
+  const opts = (S.screen ? S.screen.rows : []).map(r => `<option value="${esc(r.t)}">${esc(r.name)}</option>`).join('');
+  return `<form id="tf" class="tform">
+    <label>Date<input class="in" name="date" type="date" value="${today()}" max="${today()}" required></label>
+    <label>Ticker<input class="in" name="ticker" list="tk-list" placeholder="VWCE.DE" required autocomplete="off"><datalist id="tk-list">${opts}</datalist></label>
+    <label>Buy / sell<select class="in" name="side"><option value="buy">Buy</option><option value="sell">Sell</option></select></label>
+    <label>Quantity<input class="in" name="qty" inputmode="decimal" placeholder="10" required></label>
+    <label>Price per unit (€)<input class="in" name="price" inputmode="decimal" placeholder="118.40" required></label>
+    <label>Fees (€)<input class="in" name="fees" inputmode="decimal" placeholder="1.00"></label>
+    <button class="btn primary" type="submit">Add trade</button></form>
+    <p class="hint">Use the exchange suffix for European listings: VWCE.DE (Xetra), ASML.AS (Amsterdam), MC.PA (Paris). US stocks need none: AAPL. Prices in euros, as your broker showed them.</p>`;
+}
+
+function importBox() {
+  return `<div class="imp-box"><label class="btn"><input type="file" id="csvf" accept=".csv,text/csv" hidden>Import a CSV from your broker</label>
+    <a class="btn ghost" href="/api/trades/template.csv">Download the template</a></div>
+    <p class="hint">Needs columns for date, ticker, quantity and price (side and fees optional). English or German headers both work (Datum, Anzahl, Kurs…), and so do 14.03.2025 dates and 1.234,56 numbers. Importing the same file twice won’t double anything.</p><div id="imp-err"></div>`;
+}
+
+function pfPaint() {
+  const P = S.pf, el = $('#pf'), T = P.totals;
+  if (!P.trades.length) {
+    el.innerHTML = `<div class="grid2 fade" style="margin-top:28px">
+      <div class="card"><h3>Add your first trade</h3><p class="sub">One buy is enough to start. You can add the rest later or import them.</p>${tradeForm()}</div>
+      <div class="card"><h3>Or import your history</h3><p class="sub">Most broker apps can export your transactions as a CSV file.</p>${importBox()}</div></div>`;
+    return pfWire();
+  }
+  const maxW = Math.max(...P.holdings.map(h => h.weight || 0), .01);
+  el.innerHTML = `
+  <section class="kpis fade" style="margin-top:26px">
+    <div class="kpi"><div class="v">${euro(T.value)}</div><div class="l">Worth today</div></div>
+    <div class="kpi"><div class="v">${euro(T.cost)}</div><div class="l">You put in</div></div>
+    <div class="kpi"><div class="v ${tone(T.pnl)}">${euro(T.pnl, true)}</div><div class="l">Profit / loss · ${pc(T.pnl_pct)}</div></div>
+    <div class="kpi"><div class="v ${tone(T.day)}">${euro(T.day, true)}</div><div class="l">Last trading day</div></div>
+    <div class="kpi"><div class="v">${T.n}</div><div class="l">Holdings${T.realized ? ` · ${euro(T.realized, true)} realised` : ''}</div></div>
+  </section>
+  ${P.notes.length ? `<div class="sh"><h2>What stands out</h2></div><div class="notes">${P.notes.map(n => `<div class="note ${n.kind}"><span>${n.kind === 'warn' ? '!' : 'i'}</span><p>${esc(n.text)}</p></div>`).join('')}</div>` : ''}
+  <div class="sh"><h2>What you own</h2></div>
+  <div class="hr hr-h"><span>Holding</span><span>Share of portfolio</span><span class="num">Worth</span><span class="num">Profit / loss</span><span class="num col-avg">Avg cost → now</span><span class="num col-sc" data-tip="Its screener score (0–100), if it's in the screener list.">Score</span></div>
+  ${P.holdings.map(h => `<a class="hr" href="${h.screened ? '#/i/' + enc(h.ticker) : '#/portfolio'}">
+      <span class="hr-n"><b>${esc(h.name)}</b><span>${esc(h.ticker)} · ${esc(h.group)} · ${+h.qty.toFixed(4)} units</span></span>
+      <span class="hr-w"><span class="track"><i style="width:${(h.weight || 0) / maxW * 100}%"></i></span><b>${h.weight == null ? '—' : pc(h.weight, false)}</b></span>
+      <span class="num">${euro(h.value)}</span>
+      <span class="num ${tone(h.pnl)}">${euro(h.pnl, true)}<small>${pc(h.pnl_pct)}</small></span>
+      <span class="num col-avg">${h.price == null ? 'no price' : `€${fmtPrice(h.avg)} → €${fmtPrice(h.price)}`}</span>
+      <span class="num col-sc">${h.score == null ? '—' : `<span class="sc" style="--c:${conv(5 + h.score / 20)}">${h.score}</span>`}</span></a>`).join('')}
+  ${P.mix ? `<div class="sh"><h2>If you’d held today’s mix</h2></div>
+    <p class="sub">Your current holdings, in today’s amounts, replayed over the past ${P.mix.short ? 'months we have data for' : '3 years'}. It shows how this mix tends to move, not what you actually earned.</p>
+    <div class="xcards">${P.mix_cards.map(c => `<div class="xc ${c.tone}"><div class="xc-top"><span>${esc(c.label)}</span><b>${esc(c.value)}</b></div><p>${esc(c.plain)}</p></div>`).join('')}</div>
+    <div class="grid2" style="margin-top:28px"><div class="card"><h3>Year by year</h3><p class="sub">How today’s mix did each calendar year, in euros.</p>${yearBars(P.mix.years)}</div>
+      <div class="card"><h3>Where your money is</h3><p class="sub">By type and by group. A spread across groups usually means smoother swings.</p>
+        ${[...P.alloc.kind.map(([k, w]) => [k === 'etf' ? 'Funds (ETFs/ETCs)' : 'Single stocks', w]), ['', null], ...P.alloc.group].map(([k, w]) => w == null ? '<div style="height:12px"></div>' :
+          `<div class="pp"><div class="pp-l"><span>${esc(k)}</span><b>${pc(w, false)}</b></div><div class="pp-t"><i style="width:${w * 100}%;--c:var(--teal)"></i></div></div>`).join('')}</div></div>` : ''}
+  <div class="sh"><h2>Your trades</h2><span class="more">${P.trades.length} recorded · fees ${euro(T.fees)}</span></div>
+  <div class="grid2" style="margin-top:18px"><div class="card"><h3>Add a trade</h3>${tradeForm()}</div><div class="card"><h3>Import</h3>${importBox()}</div></div>
+  <div class="tl">${P.trades.map(t => `<div class="tl-r"><span class="cat-d">${fmtDate(t.date, true)}</span><span class="tl-s ${t.side}">${t.side}</span>
+      <span><b>${esc(t.ticker)}</b> ${+t.qty.toFixed(4)} × €${fmtPrice(t.price)}${t.fees ? ` <small>+ €${t.fees.toFixed(2)} fees</small>` : ''}${t.note ? ` <small>· ${esc(t.note)}</small>` : ''}</span>
+      <span class="num">${euro(t.qty * t.price)}</span><button class="btn sm ghost" data-del="${esc(t.id)}" type="button" aria-label="Delete trade">Delete</button></div>`).join('')}</div>`;
+  pfWire();
+}
+
+function pfWire() {
+  const f = $('#tf');
+  if (f) f.onsubmit = async e => {
+    e.preventDefault();
+    const body = Object.fromEntries(new FormData(f)); body.ticker = body.ticker.trim().toUpperCase();
+    try { S.pf = await api('/api/trades', { method: 'POST', body }); toast(`Added ${body.side} of ${body.ticker}.`); pfPaint(); }
+    catch (err) { toast(err.message, true); }
+  };
+  const file = $('#csvf');
+  if (file) file.onchange = async () => {
+    const fl = file.files[0]; if (!fl) return;
+    try {
+      const r = await api('/api/trades/import', { method: 'POST', body: { csv: await fl.text() } });
+      S.pf = r.portfolio; pfPaint();
+      toast(`Imported ${plural(r.added, 'trade')}${r.skipped ? `, skipped ${r.skipped} already there` : ''}.`, !r.added && r.errors.length > 0);
+      if (r.errors.length && $('#imp-err')) $('#imp-err').innerHTML = `<div class="note warn"><span>!</span><p>${r.errors.map(esc).join('<br>')}</p></div>`;
+    } catch (err) { toast(err.message, true); }
+  };
+  $$('[data-del]', view).forEach(b => b.onclick = async () => {
+    if (!confirm('Delete this trade?')) return;
+    try { S.pf = await api('/api/trades/' + enc(b.dataset.del), { method: 'DELETE' }); pfPaint(); toast('Trade deleted.'); }
+    catch (err) { toast(err.message, true); }
+  });
 }
 
 /* ---------- watchlist drawer ---------- */

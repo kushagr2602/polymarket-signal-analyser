@@ -1,4 +1,6 @@
-# Polymarket Signal Analyser
+# My Financial Scanner
+
+*(repo: polymarket-signal-analyser — it started as a Polymarket signal scanner)*
 
 ![Polymarket Signal Analyser](thumbnail.png)
 
@@ -47,6 +49,18 @@ streamlit run app.py                # the original Streamlit dashboard (legacy)
 python3 -m src.mcp_server           # expose the tools over MCP (stdio)
 python3 tests/eval_filter.py        # eval the filter against the labeled set
 ```
+
+## Screener and portfolio
+
+- **Screener** ([src/market.py](src/market.py), universe in [universe.json](universe.json)): ~30 European UCITS ETFs and ~50 large
+  European/US stocks, 5 years of end-of-day prices from Yahoo Finance, all converted to EUR. Ranked 0–100 on return for the
+  risk, growth per year, worst fall and the last 12 months; every number comes with a plain-English sentence and a €1,000
+  example, and an optional AI write-up explains any instrument for a beginner.
+- **Portfolio** ([src/portfolio.py](src/portfolio.py)): add trades or import a broker CSV (English or German headers, `14.03.2025`
+  dates, `1.234,56` numbers). Average-cost positions, P&L, how today's mix would have behaved, and plain-English notes on
+  concentration and overlap. **Private by design:** trades live in `data/trades.json` (gitignored) and the API refuses
+  portfolio requests that don't come straight from localhost, so a hosted copy can never expose them.
+- Not investment advice: it ranks and explains; it never tells you to buy or sell, and it never places trades.
 
 ## The web app
 

@@ -50,7 +50,7 @@ def fetch() -> dict:
     for it in UNIVERSE:
         s = raw.get(it["t"]) or []
         closes[it["t"]] = [[d, round(p, 4)] for d, p in to_eur(s, it["ccy"], raw.get(FX.get(it["ccy"], "")))]
-    return {"fetched": time.time(), "closes": closes}
+    return {"fetched": time.time(), "closes": closes, "fx": {p: raw.get(p, []) for p in fxs}}
 
 
 def load(force: bool = False) -> dict:
@@ -60,7 +60,7 @@ def load(force: bool = False) -> dict:
         if os.path.exists(CACHE):
             with open(CACHE) as f:
                 cached = json.load(f)
-            if not force and time.time() - cached["fetched"] < TTL:
+            if not force and time.time() - cached["fetched"] < TTL and "fx" in cached:
                 return cached
         try:
             data = fetch()
@@ -72,6 +72,35 @@ def load(force: bool = False) -> dict:
         with open(CACHE, "w") as f:
             json.dump(data, f)
         return data
+
+
+EXTRA = os.path.join(ROOT, "data", "extra.json")
+
+
+def extra(tickers: list[str], data: dict) -> dict:
+    """EUR closes for holdings outside the screener universe (fetched on demand, cached like the rest)."""
+    import yfinance as yf
+    with _lock:
+        cache = json.load(open(EXTRA)) if os.path.exists(EXTRA) else {}
+        changed = False
+        for t in tickers:
+            hit = cache.get(t)
+            if hit and time.time() - hit["fetched"] < TTL:
+                continue
+            try:
+                tk = yf.Ticker(t)
+                h = tk.history(period="5y", auto_adjust=True)["Close"].dropna()
+                ccy = tk.fast_info.get("currency") or "EUR"
+                s = [[d.strftime("%Y-%m-%d"), float(v)] for d, v in h.items()]
+                cache[t] = {"fetched": time.time(), "ccy": ccy,
+                            "closes": [[d, round(p, 4)] for d, p in to_eur(s, ccy, data.get("fx", {}).get(FX.get(ccy, "")))]}
+            except Exception:
+                cache[t] = {"fetched": time.time(), "ccy": None, "closes": []}  # unknown ticker — don't refetch every request
+            changed = True
+        if changed:
+            os.makedirs(os.path.dirname(EXTRA), exist_ok=True)
+            json.dump(cache, open(EXTRA, "w"))
+        return {t: cache[t]["closes"] for t in tickers if t in cache}
 
 
 # ---------------------------------------------------------------- analysis (pure)
