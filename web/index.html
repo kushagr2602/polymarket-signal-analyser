@@ -18,25 +18,23 @@
 <body>
 <header class="top">
   <div class="wrap top-in">
-    <a class="brand" href="#/screener" aria-label="My Financial Scanner — home">
+    <a class="brand" href="#/today" aria-label="My Financial Scanner — home">
       <span class="mark" aria-hidden="true"><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i></span>
       <span class="word"><em>My</em> Financial Scanner</span>
     </a>
     <nav class="nav" id="nav" aria-label="Sections">
+      <a href="#/today" data-r="today">Today</a>
       <a href="#/screener" data-r="screener">Screener</a>
       <a href="#/portfolio" data-r="portfolio">Portfolio</a>
       <a href="#/compare" data-r="compare">Compare</a>
       <a href="#/plan" data-r="plan">Savings plan</a>
       <a href="#/ipos" data-r="ipos">IPOs</a>
       <a href="#/alerts" data-r="alerts">Alerts <span class="badge" id="al-badge" hidden></span></a>
-      <a href="#/overview" data-r="overview">Predictions</a>
-      <a href="#/signals" data-r="signals">Signals</a>
-      <a href="#/news" data-r="news">News</a>
       <a href="#/ask" data-r="ask">Ask</a>
+      <a href="#/overview" data-r="overview">Predictions</a>
     </nav>
     <div class="tools">
-      <span class="fresh" id="fresh" title="Time since the last market scan"><i></i><span>—</span></span>
-      <button class="btn" id="open-wl" type="button">Watchlist</button>
+      <button class="cmdbtn" id="cmd-open" type="button" aria-label="Search or run a command"><svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.7"><circle cx="7" cy="7" r="5"/><path d="m11 11 3.5 3.5"/></svg><span>Search or command</span><kbd>⌘K</kbd></button>
       <button class="btn icon" id="theme" type="button" aria-label="Toggle light / dark theme" title="Toggle theme">◐</button>
     </div>
   </div>
@@ -52,6 +50,11 @@
 
 <div class="scrim" id="scrim"></div>
 <aside class="drawer" id="drawer" aria-label="Watchlist settings" aria-hidden="true"></aside>
+<div class="cmdk" id="cmdk" hidden><div class="cmdk-box" role="dialog" aria-label="Command bar">
+  <input id="cmdk-in" placeholder="Type a name, ticker or command…" autocomplete="off" spellcheck="false" aria-label="Command">
+  <div id="cmdk-list" role="listbox"></div>
+  <div class="cmdk-help">Try: <b>NVDA</b> · <b>compare VWCE SXR8</b> · <b>plan VWCE 200</b> · <b>screen etf world</b> · <b>ask am I too exposed to tech</b></div>
+</div></div>
 <div class="tip" id="tip" role="tooltip"></div>
 <div class="toast" id="toast" role="status" aria-live="polite"></div>
 

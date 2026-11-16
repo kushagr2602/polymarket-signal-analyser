@@ -117,18 +117,15 @@ async function loadState(force) {
 }
 
 /* top-bar freshness chip + ticker tape */
+const PULSE = [['World', 'VWCE.DE'], ['S&P 500', 'SXR8.DE'], ['Nasdaq 100', 'SXRV.DE'], ['Europe 600', 'EXSA.DE'], ['DAX', 'EXS1.DE'],
+               ['Emerging', 'IS3N.DE'], ['Nifty 50', 'NIFTYBEES.NS'], ['Gold', '4GLD.DE'], ['Global bonds', 'VAGF.DE']];
 function chrome() {
-  if (!S.data) return;
-  const d = S.data, f = $('#fresh');
-  f.classList.toggle('busy', d.rescanning);
-  f.classList.toggle('stale', !d.rescanning && d.asOf && Date.now() - new Date(d.asOf) > 6 * 3600e3);
-  $('span', f).textContent = d.rescanning ? 'rescanning…' : d.asOf ? ago(d.asOf) : 'no scans yet';
-  f.title = d.asOf ? `Last prediction-market scan: ${new Date(d.asOf).toLocaleString()}` : 'No scans yet';
-  const top = [...d.signals].filter(r => r.score >= 8).sort((a, b) => b.score - a.score || b.volume - a.volume).slice(0, 16);
-  const items = top.map(r => `<a class="ti" href="#/signals?q=${enc(r.market.slice(0, 70))}"><b style="--c:${conv(r.score)}">${r.score}</b>` +
-    `<u>${esc(r.tickers[0] || r.sector)}</u>${esc(r.market)}</a>`).join('');
-  if (d.models) $('#models').textContent = d.models.score === d.models.smart ? d.models.score : `${d.models.score} (scoring) + ${d.models.smart} (analyst)`;
-  $('#tape').innerHTML = items ? `<div class="tape-track" style="--dur:${Math.max(50, top.length * 8)}s">${items}${items}</div>` : '';
+  const d = S.data;
+  if (d && d.models) $('#models').textContent = d.models.score === d.models.smart ? d.models.score : `${d.models.score} (scoring) + ${d.models.smart} (analyst)`;
+  if (!S.screen) return;
+  const by = Object.fromEntries(S.screen.rows.map(r => [r.t, r]));
+  const items = PULSE.filter(([, t]) => by[t]).map(([l, t]) => `<a class="ti" href="#/i/${enc(t)}"><u>${l}</u><b class="${tone(by[t].m.r1d)}">${pc(by[t].m.r1d)}</b></a>`).join('');
+  $('#tape').innerHTML = items ? `<div class="tape-track" style="--dur:60s">${items.repeat(4)}</div>` : '';  // 4 copies: seamless at any width
 }
 setInterval(() => { if (S.data) chrome(); }, 30000);
 
@@ -148,17 +145,19 @@ function pollRescan() {
 }
 
 /* ---------- router ---------- */
-const ROUTES = { screener: vScreener, i: vInstrument, portfolio: vPortfolio, compare: vCompare, plan: vPlan, alerts: vAlerts, ipos: vIpos, overview: vOverview, signals: vSignals, news: vNews, ask: vAsk, brief: vBrief };
+const ROUTES = { today: vToday, screener: vScreener, i: vInstrument, portfolio: vPortfolio, compare: vCompare, plan: vPlan, alerts: vAlerts, ipos: vIpos, overview: vOverview, signals: vSignals, news: vNews, ask: vAsk, brief: vBrief };
 const NEEDS_SIGNALS = new Set(['overview', 'signals', 'brief']);  // views that read the Polymarket database
-const TITLES = { screener: 'Screener', portfolio: 'Portfolio', compare: 'Compare', plan: 'Savings plan', alerts: 'Alerts', ipos: 'IPOs', overview: 'Predictions', signals: 'Signals', news: 'News', ask: 'Ask', brief: 'Brief' };
+const TITLES = { today: 'Today', screener: 'Screener', portfolio: 'Portfolio', compare: 'Compare', plan: 'Savings plan', alerts: 'Alerts', ipos: 'IPOs', overview: 'Predictions', signals: 'Signals', news: 'News', ask: 'Ask', brief: 'Brief' };
 function parseHash() {
   const [p0, qs = ''] = location.hash.replace(/^#\/?/, '').split('?');
   const [p, ...rest] = p0.split('/');
-  return { path: ROUTES[p] ? p : 'screener', arg: decodeURIComponent(rest.join('/')), q: new URLSearchParams(qs) };
+  return { path: ROUTES[p] ? p : 'today', arg: decodeURIComponent(rest.join('/')), q: new URLSearchParams(qs) };
 }
 async function route(keepScroll) {
   const { path, arg, q } = parseHash();
-  $$('#nav a').forEach(a => a.classList.toggle('on', a.dataset.r === (path === 'i' ? 'screener' : path)));
+  const navKey = { i: 'screener', signals: 'overview', news: 'overview', brief: 'overview' }[path] || path;
+  $$('#nav a').forEach(a => a.classList.toggle('on', a.dataset.r === navKey));
+  closeCmd();
   if (S.ro) { S.ro.disconnect(); S.ro = null; }
   if (NEEDS_SIGNALS.has(path) && !S.data) {  // the screener never needs the signals database — don't let it take the app down
     view.innerHTML = `<div class="err-card fade"><h2>Prediction signals are offline</h2><p>${esc(S.stateErr || 'Still loading…')} The screener works without them.</p><a class="btn primary" href="#/screener">Open the screener</a></div>`;
@@ -177,6 +176,12 @@ async function route(keepScroll) {
 }
 addEventListener('hashchange', () => route());
 
+/* ---------- predictions: one section, four tabs ---------- */
+const predNav = a => `<div class="subnav">${[['overview', 'Overview'], ['signals', 'Signals'], ['news', 'News'], ['brief', 'Brief']]
+  .map(([r, l]) => `<a href="#/${r}" class="${a === r ? 'on' : ''}">${l}</a>`).join('')}
+  <span class="subnav-r">${S.data && S.data.asOf ? `<span class="hint">scanned ${ago(S.data.asOf)}</span>` : ''}<button class="btn sm" id="open-wl" type="button">Prediction watchlist</button></span></div>`;
+document.addEventListener('click', e => { if (e.target.closest('#open-wl')) S.data ? openDrawer() : toast('The prediction watchlist needs the signals database.', true); });
+
 /* ---------- overview ---------- */
 const sigLink = (o) => '#/signals?' + Object.entries(o).map(([k, v]) => `${k}=${enc(v)}`).join('&');
 function countUp(el) {
@@ -192,7 +197,7 @@ function countUp(el) {
 function vOverview() {
   const d = S.data, k = d.kpis, hot = d.hot, active = d.signals.filter(r => r.score >= 5);
   if (!d.signals.length) {
-    view.innerHTML = `<div class="err-card fade"><h2>No signals yet</h2><p>The scanner hasn't scored any markets. Run <code>python3 -m src.scheduler --once</code> to fetch and score them.</p></div>`;
+    view.innerHTML = predNav('overview') + `<div class="err-card fade"><h2>No signals yet</h2><p>The scanner hasn't scored any markets. Run <code>python3 -m src.scheduler --once</code> to fetch and score them.</p></div>`;
     return;
   }
   const top = hot[0];
@@ -205,7 +210,7 @@ function vOverview() {
     : `<h1 class="display">Nothing is running hot yet.</h1><p class="lede">No sector has a signal scoring 5 or above right now.</p>`;
   const cells = [...active].sort((a, b) => b.score - a.score || b.volume - a.volume).slice(0, 48);
 
-  view.innerHTML = `
+  view.innerHTML = predNav('overview') + `
   <section class="hero fade">
     <div><div class="eyebrow">Right now</div>${hero}</div>
     <div class="waffle-wrap">
@@ -401,6 +406,7 @@ function syncHash() {
 function vSignals() {
   const d = S.data, f = S.f;
   view.innerHTML = `
+  ${predNav('signals')}
   <div class="page-h fade"><div class="eyebrow">Signals</div><h1>Every scored market</h1>
     <p>8–10 is a direct hit on a stock you watch · 5–7 hits its sector · 3–4 moves the whole market a little. Filter, then watch what closes soon.</p></div>
   <div class="fbar">
@@ -458,7 +464,7 @@ function list() {
 
 /* ---------- news ---------- */
 async function vNews() {
-  view.innerHTML = `<div class="page-h fade"><div class="eyebrow">World news</div><h1>Headlines, read through your watchlist</h1>
+  view.innerHTML = predNav('news') + `<div class="page-h fade"><div class="eyebrow">World news</div><h1>Headlines, read through your watchlist</h1>
     <p>Each headline is scored 0–5 for its effect on a stock you hold. Teal is supportive, red is adverse, grey is noise.</p></div><div class="news" id="nw"><div class="loading sm">${orbHTML(56, 'Reading the wires…')}</div></div>`;
   mountOrbs(view);
   if (!S.news) { try { S.news = await api('/api/news'); } catch (e) { S.news = []; } }
@@ -485,7 +491,7 @@ function chatHTML() {
     : `<div class="msg bot"><div class="who">Desk</div>${m.trace && m.trace.length ? `<div class="trace">${m.trace.map(t => `<span>${esc(t)}</span>`).join('')}</div>` : ''}<div class="prose">${md(m.content)}</div></div>`).join('') +
     (S.asking ? `<div class="thinking">${orbHTML(36)}<span>Agent planning tool calls…</span></div>` : '');
 }
-function vAsk() {
+function vAsk(q) {
   view.innerHTML = `<div class="page-h fade"><div class="eyebrow">Ask</div><h1>Ask about your money</h1>
     <p>Ask in plain words about your portfolio, any fund or stock in the screener, or the prediction signals. It looks the numbers up (and shows you which lookups it ran), explains the jargon, and never tells you to buy or sell. Your portfolio is only visible to it when the app runs on your own computer.</p></div>
   <div class="chat"><div class="prompts">${['Am I too exposed to tech?', 'What is my riskiest holding, in plain English?', 'Which world ETFs are the calmest?',
@@ -503,11 +509,13 @@ function vAsk() {
   };
   $('#askf').onsubmit = e => { e.preventDefault(); send($('#askq').value); };
   $$('.prompts .cf', view).forEach(b => b.onclick = () => send(b.dataset.p));
+  const pre = q && q.get('q');
+  if (pre) { history.replaceState(null, '', '#/ask'); send(pre); }
 }
 
 /* ---------- brief ---------- */
 async function vBrief() {
-  view.innerHTML = `<div class="page-h fade"><div class="eyebrow">Daily brief</div><h1>The day, as an analyst note</h1>
+  view.innerHTML = predNav('brief') + `<div class="page-h fade"><div class="eyebrow">Daily brief</div><h1>The day, as an analyst note</h1>
     <p>The top signals written up — lead catalyst first, then implications by sector.</p></div><div id="bf"><div class="loading sm">${orbHTML(56, 'Loading briefs…')}</div></div>`;
   mountOrbs(view);
   if (!S.briefs) { try { S.briefs = await api('/api/briefs'); } catch (e) { S.briefs = []; } }
@@ -537,7 +545,8 @@ const LEARN = [
   ['Return for the risk', 'Growth divided by swing: how much reward you got per unit of bumpiness. Above 1 is excellent, below 0.5 is a lot of stress for the reward. Professionals call a version of this the Sharpe ratio.'],
 ];
 
-async function vScreener() {
+async function vScreener(q) {
+  if (q && [...q.keys()].length) S.sc = { ...SDEF, kind: q.get('kind') || SDEF.kind, group: q.get('group') || '', q: q.get('q') || '' };
   let learnOpen = true; try { learnOpen = localStorage.getItem('learn') !== 'closed'; } catch (e) { /* private mode */ }
   view.innerHTML = `
   <div class="page-h fade"><div class="eyebrow">Screener</div><h1>Funds and stocks, ranked and explained</h1>
@@ -1142,24 +1151,127 @@ drawer.addEventListener('submit', async e => {
   W.finding = false; paintDrawer(); $('#ind', drawer).value = q;
 });
 scrim.onclick = closeDrawer;
-$('#open-wl').onclick = () => S.data ? openDrawer() : toast('The prediction watchlist needs the signals database.', true);
 $('#theme').onclick = () => {
   const n = theme() === 'dark' ? 'light' : 'dark'; document.documentElement.dataset.theme = n;
   try { localStorage.setItem('theme', n); } catch (e) { /* private mode */ }
   chrome(); route(true);
 };
 addEventListener('keydown', e => {
-  if (e.key === 'Escape') closeDrawer();
+  if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'k') { e.preventDefault(); return $('#cmdk').hidden ? openCmd() : closeCmd(); }
+  if (e.key === 'Escape') { closeDrawer(); closeCmd(); }
   if (e.key === '/' && !/INPUT|TEXTAREA|SELECT/.test(document.activeElement.tagName)) {
     e.preventDefault();
-    if (!$('#q')) location.hash = '#/screener';
-    setTimeout(() => $('#q') && $('#q').focus(), 60);
+    if ($('#q')) $('#q').focus(); else openCmd();
   }
+});
+
+/* ---------- today (home) ---------- */
+async function vToday() {
+  const day = new Date().toLocaleDateString('en-GB', { weekday: 'long', day: 'numeric', month: 'long' });
+  view.innerHTML = `<div class="page-h fade"><div class="eyebrow">${day}</div><h1>Today</h1>
+    <p>Your portfolio, the markets and what changed, in one place. Press <kbd>⌘K</kbd> to jump anywhere.</p></div>
+    <div id="td"><div class="loading sm">${orbHTML(56, 'Pulling it together…')}</div></div>`;
+  mountOrbs(view);
+  const [scr, pf, ipo] = await Promise.all([S.screen ? S.screen : api('/api/screen').catch(() => null), api('/api/portfolio').catch(() => null),
+                                            api('/api/ipos').catch(() => null), refreshAlerts()]);
+  if (scr) { S.screen = scr; chrome(); }
+  S.pf = pf; S.ipo = ipo;
+  if (!$('#td')) return;
+  const rows = scr ? scr.rows : [], by = Object.fromEntries(rows.map(r => [r.t, r])), asof = scr ? fmtDate(scr.asOf, true) : '';
+  const T = pf && pf.totals, held = pf ? pf.holdings.filter(h => h.r1d != null) : [];
+  const fired = S.al ? S.al.alerts.filter(a => a.triggered) : [];
+  const movers = [...rows].filter(r => r.m.r1d != null).sort((a, b) => b.m.r1d - a.m.r1d);
+  const soonIpo = ipo ? [...ipo.calendar.filter(i => i.upcoming && i.date && (new Date(i.date) - Date.now()) / 864e5 <= 7),
+                         ...(ipo.watch || []).filter(w => w.date && (new Date(w.date) - Date.now()) / 864e5 <= 14 && new Date(w.date) >= Date.now() - 864e5)] : [];
+  const tr = S.data && S.data.trends, hot = S.data && S.data.hot && S.data.hot[0];
+  const mvRow = r => `<a class="tdm" href="#/i/${enc(r.t)}"><span>${esc(r.name)}<small>${esc(r.t)} · ${esc(r.group)}</small></span><b class="${tone(r.m.r1d)}">${pc(r.m.r1d)}</b></a>`;
+  $('#td').innerHTML = `
+  <div class="td-hero fade">${T && T.n ? `<h2>Your portfolio is worth <b>${euro(T.value)}</b>, <span class="${tone(T.day)}">${euro(T.day, true)}</span> on the last trading day.</h2>
+      <p>${euro(T.pnl, true)} (${pc(T.pnl_pct)}) since you bought · prices as of ${asof} · <a href="#/portfolio">Open portfolio →</a></p>`
+    : pf ? `<h2>Add your trades to see your day here.</h2><p><a href="#/portfolio">Add a trade or import from your broker →</a></p>`
+    : `<h2>Markets as of ${asof}.</h2><p>Your portfolio shows up here when the app runs on your own computer.</p>`}</div>
+
+  <div class="sh" style="margin-top:34px"><h2>Market pulse</h2><span class="more">last trading day · 1 month · this year</span></div>
+  <div class="pulse">${PULSE.filter(([, t]) => by[t]).map(([l, t]) => { const m = by[t].m; return `<a class="pl" href="#/i/${enc(t)}"><span>${l}</span>
+      <b class="${tone(m.r1d)}">${pc(m.r1d)}</b><small><i class="${tone(m.r1m)}">${pc(m.r1m)}</i> · <i class="${tone(m.ytd)}">${pc(m.ytd)}</i></small></a>`; }).join('') || '<div class="empty">Prices unavailable right now.</div>'}</div>
+
+  <div class="grid2" style="margin-top:28px">
+    <div class="card"><h3>${held.length ? 'Your holdings today' : 'Biggest risers'}</h3>
+      ${held.length ? [...held].sort((a, b) => Math.abs(b.r1d) - Math.abs(a.r1d)).slice(0, 6).map(h => `<a class="tdm" href="#/i/${enc(h.ticker)}"><span>${esc(h.name)}<small>${euro(h.value)} · ${pc(h.weight, false)} of portfolio</small></span>
+        <b class="${tone(h.r1d)}">${pc(h.r1d)}<small>${euro(h.value * h.r1d / (1 + h.r1d), true)}</small></b></a>`).join('') : movers.slice(0, 6).map(mvRow).join('')}</div>
+    <div class="card"><h3>${held.length ? 'Biggest moves in the screener' : 'Biggest fallers'}</h3>
+      ${held.length ? [...movers.slice(0, 3), ...movers.slice(-3).reverse()].map(mvRow).join('') : movers.slice(-6).reverse().map(mvRow).join('')}</div>
+  </div>
+
+  <div class="grid2" style="margin-top:28px">
+    <div class="card"><h3>Alerts ${fired.length ? `<span class="badge">${fired.length}</span>` : ''}</h3>
+      ${fired.length ? fired.slice(0, 4).map(a => `<p class="td-line"><a href="#/i/${enc(a.ticker)}"><b>${esc(a.ticker)}</b></a> ${esc(a.text)}</p>`).join('') + (fired.length > 4 ? `<a class="more" href="#/alerts">+${fired.length - 4} more →</a>` : '')
+        : S.al ? `<p class="td-line">Nothing fired. <a href="#/alerts">${S.al.alerts.length ? `Watching ${plural(S.al.alerts.length, 'alert')} →` : 'Set up price alerts →'}</a></p>` : '<p class="td-line">Alerts work when the app runs on your own computer.</p>'}
+      <h3 style="margin-top:22px">IPOs this week</h3>
+      ${soonIpo.length ? soonIpo.slice(0, 4).map(i => `<p class="td-line"><b>${esc(i.name)}</b> <span class="hint">${esc(i.exchange || '')} · ${i.date ? fmtDate(i.date, true) : 'TBA'}</span></p>`).join('')
+        : `<p class="td-line">None coming up. <a href="#/ipos">See the IPO calendar →</a></p>`}</div>
+    <div class="card side-pred"><h3>Prediction markets</h3>
+      ${hot ? `<p class="td-line"><b>${esc(hot.sector)}</b> is the hottest segment: ${plural(hot.n, 'live signal')}, ${money(hot.volume)} behind them.</p>` : '<p class="td-line">No prediction signals loaded.</p>'}
+      ${tr && tr.movers && tr.movers.length ? `<p class="hint" style="margin:14px 0 4px">Odds that moved since yesterday</p>` + tr.movers.slice(0, 3).map(m => `<p class="td-line"><b class="${m.delta > 0 ? 'up' : 'down'}">${m.delta > 0 ? '+' : '−'}${Math.round(Math.abs(m.delta) * 100)} pts</b> ${esc(m.market)}</p>`).join('') : ''}
+      <a class="more" href="#/overview" style="display:inline-block;margin-top:12px">Open Predictions →</a></div>
+  </div>`;
+}
+
+/* ---------- command bar (⌘K) ---------- */
+const PAGES = [['today', 'Today'], ['screener', 'Screener'], ['portfolio', 'Portfolio'], ['compare', 'Compare'], ['plan', 'Savings plan'], ['ipos', 'IPOs'],
+               ['alerts', 'Alerts'], ['ask', 'Ask'], ['overview', 'Predictions'], ['signals', 'Prediction signals'], ['news', 'Prediction news'], ['brief', 'Daily brief']];
+let CMD = { items: [], i: 0 };
+function cmdFind(tok) {
+  const rows = S.screen ? S.screen.rows : [], t = tok.toLowerCase();
+  return rows.find(r => r.t.toLowerCase() === t || r.t.toLowerCase().split('.')[0] === t) || rows.find(r => r.name.toLowerCase().startsWith(t)) || rows.find(r => r.name.toLowerCase().includes(t));
+}
+function cmdResults(raw) {
+  const q = raw.trim(), ql = q.toLowerCase(), rows = S.screen ? S.screen.rows : [], out = [];
+  let m;
+  if ((m = ql.match(/^(compare|vs)\s+(.+)/))) {
+    const ts = [...new Set(m[2].split(/[\s,]+/).filter(Boolean).map(cmdFind).filter(Boolean))];
+    if (ts.length) out.push({ label: `Compare ${ts.map(r => r.name).join(' · ')}`, hint: ts.length < 2 ? 'add one more' : '', go: '#/compare?t=' + enc(ts.map(r => r.t).join(',')) });
+  }
+  if ((m = ql.match(/^(plan|sparplan)\s+(\S+)(?:\s+€?(\d+(?:[.,]\d+)?))?/))) {
+    const r = cmdFind(m[2]);
+    if (r) out.push({ label: `Savings plan: ${m[3] ? `€${m[3]} a month into ` : ''}${r.name}`, go: `#/plan?t=${enc(r.t)}${m[3] ? '&m=' + m[3].replace(',', '.') : ''}` });
+  }
+  if ((m = q.match(/^ask\s+(.+)/i))) out.push({ label: `Ask: “${m[1]}”`, hint: 'AI analyst', go: '#/ask?q=' + enc(m[1]) });
+  if ((m = ql.match(/^screen(?:\s+(etfs?|stocks?|funds?))?\s*(.*)$/))) {
+    const kind = { etf: 'etf', etfs: 'etf', stock: 'stock', stocks: 'stock', fund: 'fund', funds: 'fund' }[m[1]] || 'etf';
+    const g = m[2] && [...new Set(rows.filter(r => r.kind === kind).map(r => r.group))].find(x => x.toLowerCase().startsWith(m[2].trim()));
+    out.push({ label: `Screener: ${kind === 'stock' ? 'stocks' : kind === 'fund' ? 'active funds' : 'ETFs'}${g ? ' · ' + g : ''}`, go: `#/screener?kind=${kind}${g ? '&group=' + enc(g) : ''}` });
+  }
+  if (ql && !/^(compare|vs|plan|sparplan|ask|screen)\b/.test(ql)) {
+    rows.filter(r => r.t.toLowerCase().includes(ql) || r.name.toLowerCase().includes(ql)).slice(0, 6)
+      .forEach(r => out.push({ label: r.name, hint: `${r.t} · ${r.group} · score ${r.score}`, go: '#/i/' + enc(r.t) }));
+  }
+  PAGES.filter(([, l]) => !ql || l.toLowerCase().includes(ql)).slice(0, ql ? 3 : 12).forEach(([r, l]) => out.push({ label: `Go to ${l}`, go: '#/' + r }));
+  if (q && !/^ask\b/i.test(q) && !out.some(o => o.go.startsWith('#/i/'))) out.push({ label: `Ask: “${q}”`, hint: 'AI analyst', go: '#/ask?q=' + enc(q) });
+  return out.slice(0, 9);
+}
+function paintCmd() {
+  $('#cmdk-list').innerHTML = CMD.items.map((it, k) => `<div class="cmdk-it${k === CMD.i ? ' on' : ''}" data-k="${k}" role="option"><span>${esc(it.label)}</span>${it.hint ? `<small>${esc(it.hint)}</small>` : ''}</div>`).join('')
+    || '<div class="cmdk-empty">Nothing matches.</div>';
+}
+function openCmd() {
+  const box = $('#cmdk'); box.hidden = false;
+  const inp = $('#cmdk-in'); inp.value = ''; CMD = { items: cmdResults(''), i: 0 }; paintCmd(); setTimeout(() => inp.focus(), 0);
+}
+function closeCmd() { const box = $('#cmdk'); if (box) box.hidden = true; }
+function runCmd(k) { const it = CMD.items[k]; if (!it) return; closeCmd(); location.hash = it.go; }
+$('#cmd-open').onclick = openCmd;
+$('#cmdk').addEventListener('click', e => { const it = e.target.closest('.cmdk-it'); if (it) return runCmd(+it.dataset.k); if (e.target.id === 'cmdk') closeCmd(); });
+$('#cmdk-in').addEventListener('input', e => { CMD = { items: cmdResults(e.target.value), i: 0 }; paintCmd(); });
+$('#cmdk-in').addEventListener('keydown', e => {
+  if (e.key === 'ArrowDown' || e.key === 'ArrowUp') { e.preventDefault(); CMD.i = (CMD.i + (e.key === 'ArrowDown' ? 1 : -1) + CMD.items.length) % Math.max(1, CMD.items.length); paintCmd(); }
+  if (e.key === 'Enter') { e.preventDefault(); runCmd(CMD.i); }
 });
 
 /* ---------- boot ---------- */
 (async function boot() {
   view.innerHTML = `<div class="loading">${orbHTML(72, 'Loading…')}</div>`; mountOrbs(view);
+  api('/api/screen').then(x => { S.screen = x; chrome(); }).catch(() => { /* screener page will report it */ });
   try { await loadState(); pollRescan(); } catch (e) { S.stateErr = e.message; }  // signals optional; screener still runs
   route();
   refreshAlerts();  // badge + browser notification for anything that fired (local only; silently skipped when hosted)
