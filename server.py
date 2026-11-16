@@ -215,6 +215,25 @@ def compare(t: str):
     return r
 
 
+@app.get("/api/plan")
+def plan(t: str, monthly: float = 100, start: str = "", fee: float = 0):
+    from src import market
+    if not (1 <= monthly <= 100_000) or not (0 <= fee < monthly):
+        raise HTTPException(400, "Monthly amount must be €1–100,000, and the fee less than that.")
+    data, tk = market.load(), t.strip().upper()
+    item = next((i for i in market.UNIVERSE if i["t"] == tk), None)
+    series = data["closes"].get(tk) or []
+    if not item or not series:
+        raise HTTPException(404, "Not in the screener list.")
+    r = market.savings_plan(series, monthly, start or series[0][0], fee)
+    if not r:
+        raise HTTPException(400, "Not enough price history after that start date.")
+    r["scenarios"] = {y: {f"{int(k * 100)}%": round(market.project(r["value"], monthly, y, k)) for k in (.02, .05, .08)}
+                      for y in (5, 10, 20)}
+    r["first"] = series[0][0]
+    return {"name": item["name"], "t": tk, "kind": item["kind"], **r}
+
+
 @app.post("/api/explain/{ticker}")
 def explain(ticker: str, request: Request):
     """Beginner-friendly write-up of one instrument, from the computed numbers only (cached per day)."""

@@ -147,9 +147,9 @@ function pollRescan() {
 }
 
 /* ---------- router ---------- */
-const ROUTES = { screener: vScreener, i: vInstrument, portfolio: vPortfolio, compare: vCompare, overview: vOverview, signals: vSignals, news: vNews, ask: vAsk, brief: vBrief };
+const ROUTES = { screener: vScreener, i: vInstrument, portfolio: vPortfolio, compare: vCompare, plan: vPlan, overview: vOverview, signals: vSignals, news: vNews, ask: vAsk, brief: vBrief };
 const NEEDS_SIGNALS = new Set(['overview', 'signals', 'brief']);  // views that read the Polymarket database
-const TITLES = { screener: 'Screener', portfolio: 'Portfolio', compare: 'Compare', overview: 'Predictions', signals: 'Signals', news: 'News', ask: 'Ask', brief: 'Brief' };
+const TITLES = { screener: 'Screener', portfolio: 'Portfolio', compare: 'Compare', plan: 'Savings plan', overview: 'Predictions', signals: 'Signals', news: 'News', ask: 'Ask', brief: 'Brief' };
 function parseHash() {
   const [p0, qs = ''] = location.hash.replace(/^#\/?/, '').split('?');
   const [p, ...rest] = p0.split('/');
@@ -590,7 +590,8 @@ async function vInstrument(q, t) {
     <div><div class="eyebrow">${esc(r.group)} · ${kindL} · ${esc(r.t)}</div><h1>${esc(r.name)}</h1>
       <p class="ih-sub"><b>€${fmtPrice(m.price)}</b> <span class="${tone(m.r1d)}">${pc(m.r1d)} on the day</span> · as of ${fmtDate(m.asof, true)}${r.ccy !== 'EUR' ? ` · converted from ${r.ccy === 'GBp' ? 'GBP' : esc(r.ccy)}` : ''}</p>
       <p class="ih-why">${esc(r.why)}</p>
-      <a class="btn" style="margin-top:16px" href="#/compare?t=${enc([r.t, r.bench].filter(Boolean).join(','))}">Compare with others →</a></div>
+      <div class="cta" style="margin-top:16px"><a class="btn" href="#/compare?t=${enc([r.t, r.bench].filter(Boolean).join(','))}">Compare with others →</a>
+        <a class="btn" href="#/plan?t=${enc(r.t)}">Simulate a monthly plan →</a></div></div>
     <div class="ih-score"><div class="big" style="color:${conv(5 + r.score / 20)}">${r.score}</div><div class="l">score / 100</div><div class="rk">#${r.rank} of ${r.of} ${noun} here</div></div>
   </div>
   <div class="card chart-card"><div class="chart-top"><div class="readout" id="ro"></div>
@@ -759,6 +760,90 @@ function cmpChart(c, col, range) {
     $('#ccx', svg).setAttribute('x1', X(d)); $('#ccx', svg).setAttribute('x2', X(d)); $('#ccx', svg).setAttribute('opacity', 1);
     lines.forEach((l, i) => { const p = at(l.pts, d), dot = $('#ccd' + i, svg); dot.setAttribute('cx', X(p[0])); dot.setAttribute('cy', Y(p[1])); dot.setAttribute('opacity', 1); });
     ro.innerHTML = `<span class="lg-h">${fmtDate(d, true)}</span>` + say(d);
+  };
+  hit.onmouseleave = rest;
+}
+
+/* ---------- savings plan (Sparplan) ---------- */
+async function vPlan(q) {
+  if (!S.screen) { try { S.screen = await api('/api/screen'); } catch (e) { /* the plan call reports it */ } }
+  const rows = S.screen ? S.screen.rows : [], t = (q.get('t') || 'VWCE.DE').toUpperCase(), m = +(q.get('m') || 100), fee = +(q.get('fee') || 0);
+  const five = new Date(Date.now() - 5 * 365 * 864e5).toISOString().slice(0, 7), start = q.get('s') || five, nowM = new Date().toISOString().slice(0, 7);
+  view.innerHTML = `
+  <div class="page-h fade"><div class="eyebrow">Savings plan</div><h1>What if you’d invested every month?</h1>
+    <p>A savings plan (Sparplan) buys a fixed amount on the same day every month, whatever the price. This replays real prices, including the scary moments, so you can see how it actually feels.</p></div>
+  <form id="pf2" class="tform plan-form">
+    <label>Fund or stock<input class="in" name="t" list="pl-list" value="${esc(t)}" required autocomplete="off"><datalist id="pl-list">${rows.map(r => `<option value="${esc(r.t)}">${esc(r.name)}</option>`).join('')}</datalist></label>
+    <label>Every month (€)<input class="in" name="m" inputmode="decimal" value="${m}" required></label>
+    <label>Starting<input class="in" name="s" type="month" value="${esc(start)}" max="${nowM}"></label>
+    <label>Fee per purchase (€)<input class="in" name="fee" inputmode="decimal" value="${fee}"></label>
+    <button class="btn primary" type="submit">Run it</button></form>
+  <div id="pl"><div class="loading sm">${orbHTML(56, 'Replaying the months…')}</div></div>`;
+  mountOrbs(view);
+  $('#pf2').onsubmit = e => {
+    e.preventDefault();
+    const f = Object.fromEntries(new FormData(e.target)), hit = rows.find(r => r.t.toLowerCase() === f.t.trim().toLowerCase()) || rows.find(r => r.name.toLowerCase().includes(f.t.trim().toLowerCase()));
+    if (!hit) return toast('Pick something from the screener list.', true);
+    location.hash = `#/plan?t=${enc(hit.t)}&m=${enc(String(f.m).replace(',', '.'))}&s=${enc(f.s)}&fee=${enc(String(f.fee || 0).replace(',', '.'))}`;
+  };
+  let p;
+  try { p = await api(`/api/plan?t=${enc(t)}&monthly=${m}&start=${enc(start + '-01')}&fee=${fee}`); }
+  catch (e) { if ($('#pl')) $('#pl').innerHTML = `<div class="empty">${esc(e.message)}</div>`; return; }
+  if (!$('#pl')) return;
+  const eu = n => '€' + Math.round(n).toLocaleString('en-US'), w = p.worst;
+  const cards = [
+    ['Like earning', pc(p.xirr) + ' a year', `Because you added money over time, the fairest single number is the yearly return on each euro while it was invested: about ${pc(p.xirr)} a year. (Professionals call this the money-weighted return.)`, p.xirr > .05 ? 'good' : p.xirr < 0 ? 'bad' : 'neutral'],
+    ['Worst moment', pc(w.pct), w.pct < 0 ? `On ${fmtDate(w.date, true)} the ${eu(w.paid)} you’d paid in was worth ${eu(w.value)}. That’s the moment many people stop and sell, and miss the recovery that followed.` : 'It never dipped below what you’d paid in. That’s unusual; most plans go through at least one stretch in the red.', w.pct < -.15 ? 'bad' : 'neutral'],
+    ['Buying every month', '€' + fmtPrice(p.avg_price) + ' avg', `You’d own ${p.units.toFixed(2)} units bought at an average of €${fmtPrice(p.avg_price)}; today they’re €${fmtPrice(p.price)} each. When prices dip, the same monthly amount buys more units. That’s why steady buying smooths out bad timing.`, 'neutral'],
+    ['Fees', eu(p.fees), p.fees ? `${eu(p.fees)} in purchase fees, ${pc(p.fees / p.paid, false)} of what you put in. Small fees add up over many purchases.` : 'Many brokers run savings plans for free, while some charge around €1 per purchase. Try the fee field to see the difference.', 'neutral'],
+  ];
+  const hz = 10, sc = y => p.scenarios[y];
+  $('#pl').innerHTML = `
+  <div class="plan-hero fade"><h2>You’d have put in <b>${eu(p.paid)}</b> and have <b class="${tone(p.gain)}">${eu(p.value)}</b> today.</h2>
+    <p>${eu(m)} a month into ${esc(p.name)} since ${fmtDate(p.start, true)}: ${p.months} purchases, ${p.gain >= 0 ? 'a gain of' : 'a loss of'} <b class="${tone(p.gain)}">${eu(Math.abs(p.gain))} (${pc(p.gain_pct)})</b>.${p.start > start + '-01' && p.start.slice(0, 7) !== start ? ` Price history starts ${fmtDate(p.first, true)}, so the plan starts there.` : ''}</p></div>
+  <div class="card chart-card"><div class="chart-top"><div class="readout" id="plro"></div><div class="legend2"><span><i class="dot" style="background:var(--muted)"></i>Paid in</span><span><i class="dot" style="background:var(--teal)"></i>Worth</span></div></div>
+    <svg class="pchart" id="plc" role="img" aria-label="Amount paid in versus value over time"></svg></div>
+  <div class="xcards">${cards.map(([l, v, b, tn]) => `<div class="xc ${tn}"><div class="xc-top"><span>${l}</span><b>${esc(v)}</b></div><p>${esc(b)}</p></div>`).join('')}</div>
+  <div class="sh"><h2>If you keep going</h2><div class="seg" id="hz">${[5, 10, 20].map(y => `<button type="button" data-y="${y}" class="${y === hz ? 'on' : ''}">${y} years</button>`).join('')}</div></div>
+  <p class="sub">Your pot today plus ${eu(m)} a month, if it grew at a steady 2%, 5% or 8% a year. These are illustrations, not forecasts: real returns zig-zag like the chart above, and nothing guarantees any of them.</p>
+  <div class="scen" id="scen"></div>
+  <p class="disc">Past performance doesn’t predict future returns. Taxes aren’t included.</p>`;
+  const paintScen = y => { const paidThen = p.paid + m * 12 * y;
+    $('#scen').innerHTML = Object.entries(sc(y)).map(([k, v]) => `<div class="kpi"><div class="v">${eu(v)}</div><div class="l">at ${k} a year · paid in ${eu(paidThen)}</div></div>`).join(''); };
+  paintScen(hz);
+  $('#hz').onclick = e => { const b = e.target.closest('button'); if (!b) return; $$('#hz button').forEach(x => x.classList.toggle('on', x === b)); paintScen(+b.dataset.y); };
+  const draw = () => planChart(p.timeline);
+  draw();
+  S.ro = new ResizeObserver(() => { clearTimeout(S.rt); S.rt = setTimeout(draw, 100); }); S.ro.observe($('#plc'));
+}
+
+function planChart(tl) {
+  const svg = $('#plc'); if (!svg || tl.length < 2) return;
+  const W = svg.clientWidth, H = svg.clientHeight, M = { l: 6, r: 70, t: 14, b: 26 };
+  if (W < 140 || H < 80) return;
+  svg.setAttribute('viewBox', `0 0 ${W} ${H}`);
+  const hi0 = Math.max(...tl.map(x => Math.max(x[1], x[2]))), hi = hi0 * 1.06;
+  const X = i => M.l + i / (tl.length - 1) * (W - M.l - M.r), Y = v => M.t + (hi - v) / hi * (H - M.t - M.b);
+  const paid = tl.map((x, i) => `${i ? 'L' + X(i).toFixed(1) + ',' + Y(tl[i - 1][1]).toFixed(1) + 'L' : 'M'}${X(i).toFixed(1)},${Y(x[1]).toFixed(1)}`).join('');
+  const val = tl.map((x, i) => `${i ? 'L' : 'M'}${X(i).toFixed(1)},${Y(x[2]).toFixed(1)}`).join('');
+  let g = '';
+  for (let k = 1; k <= 4; k++) { const v = hi0 * k / 4; g += `<line x1="${M.l}" x2="${W - M.r}" y1="${Y(v)}" y2="${Y(v)}" stroke="var(--line2)"/><text x="${W - M.r + 10}" y="${Y(v) + 4}">€${Math.round(v).toLocaleString('en-US')}</text>`; }
+  [0, Math.floor((tl.length - 1) / 2), tl.length - 1].forEach((i, k) => { g += `<text x="${X(i)}" y="${H - 6}" text-anchor="${['start', 'middle', 'end'][k]}">${fmtDate(tl[i][0])}</text>`; });
+  svg.innerHTML = `<defs><linearGradient id="plg" x1="0" x2="0" y1="0" y2="1"><stop offset="0" style="stop-color:var(--teal);stop-opacity:.22"/><stop offset="1" style="stop-color:var(--teal);stop-opacity:0"/></linearGradient></defs>${g}
+    <path d="${val}L${X(tl.length - 1)},${H - M.b}L${X(0)},${H - M.b}Z" fill="url(#plg)"/>
+    <path d="${paid}" fill="none" stroke="var(--muted)" stroke-width="1.6" stroke-dasharray="4 3"/>
+    <path d="${val}" fill="none" stroke="var(--teal)" stroke-width="2.2" stroke-linejoin="round"/>
+    <line id="pcx" y1="${M.t}" y2="${H - M.b}" stroke="var(--muted)" stroke-dasharray="3 3" opacity="0"/><circle id="pcd" r="4.5" fill="var(--teal)" stroke="var(--surface)" stroke-width="2" opacity="0"/>
+    <rect id="phit" x="${M.l}" y="0" width="${W - M.l - M.r}" height="${H}" fill="transparent"/>`;
+  const ro = $('#plro'), eu = n => '€' + Math.round(n).toLocaleString('en-US');
+  const say = i => { const [d, pd, v] = tl[i]; ro.innerHTML = `<b>${fmtDate(d, true)}</b> · paid in ${eu(pd)} · worth <b class="${tone(v - pd)}">${eu(v)}</b> <span class="${tone(v - pd)}">(${pc(pd ? v / pd - 1 : 0)})</span>`; };
+  const rest = () => { $('#pcx', svg).setAttribute('opacity', 0); $('#pcd', svg).setAttribute('opacity', 0); say(tl.length - 1); };
+  rest();
+  const hit = $('#phit', svg);
+  hit.onmousemove = e => {
+    const b = svg.getBoundingClientRect(), x = (e.clientX - b.left) * (W / b.width), i = Math.max(0, Math.min(tl.length - 1, Math.round((x - M.l) / (W - M.l - M.r) * (tl.length - 1))));
+    $('#pcx', svg).setAttribute('x1', X(i)); $('#pcx', svg).setAttribute('x2', X(i)); $('#pcx', svg).setAttribute('opacity', 1);
+    $('#pcd', svg).setAttribute('cx', X(i)); $('#pcd', svg).setAttribute('cy', Y(tl[i][2])); $('#pcd', svg).setAttribute('opacity', 1); say(i);
   };
   hit.onmouseleave = rest;
 }

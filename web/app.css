@@ -514,3 +514,15 @@ a.hr:hover { background: var(--surface); }
 .ctab tbody th { text-align: left; font: 500 11px var(--ff-m); letter-spacing: .08em; text-transform: uppercase; color: var(--muted); }
 .ctab td { font: 500 13px var(--ff-m); color: var(--soft); }
 .ctab td.best { color: var(--teal); font-weight: 600; }
+
+/* ---------- savings plan ---------- */
+.plan-form { grid-template-columns: 2fr 1fr 1fr 1fr auto; margin-top: 24px; }
+.plan-hero { padding: 34px 0 20px; }
+.plan-hero h2 { font: 600 clamp(1.6rem, 3.4vw, 2.5rem)/1.12 var(--ff-d); letter-spacing: -.03em; margin: 0 0 10px; max-width: 28ch; }
+.plan-hero h2 b { font-weight: 600; } .plan-hero h2 b.up { color: var(--teal); } .plan-hero h2 b.down { color: var(--red); }
+.plan-hero p { color: var(--soft); font-size: 16px; margin: 0; max-width: 70ch; }
+.legend2 { display: flex; gap: 16px; font: 500 11.5px var(--ff-m); color: var(--muted); }
+.scen { display: grid; grid-template-columns: repeat(3, 1fr); border-top: 1px solid var(--line); border-bottom: 1px solid var(--line); }
+.scen .kpi:first-child { padding-left: 0; border-left: 0; }
+@media (max-width: 1020px) { .plan-form { grid-template-columns: 1fr 1fr; } .plan-form .btn { grid-column: 1 / -1; } }
+@media (max-width: 720px) { .plan-form { grid-template-columns: 1fr; } .scen { grid-template-columns: 1fr; } .scen .kpi { border-left: 0; padding-left: 0; } }

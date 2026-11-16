@@ -382,6 +382,65 @@ def compare(data: dict, tickers: list[str]) -> dict | None:
             "series": {r["t"]: data["closes"][r["t"]] for r in items}, "summary": summary, "pairs": pairs}
 
 
+def xirr(flows: list[tuple[str, float]]) -> float | None:
+    """Money-weighted yearly return of dated cash flows (negative = paid in, positive = value out). Bisection."""
+    if not flows or not any(v < 0 for _, v in flows) or not any(v > 0 for _, v in flows):
+        return None
+    d0 = date.fromisoformat(flows[0][0])
+    t = [(date.fromisoformat(d) - d0).days / 365 for d, _ in flows]
+    npv = lambda r: sum(v / (1 + r) ** ti for (_, v), ti in zip(flows, t))
+    lo, hi = -.99, 10.0
+    if npv(lo) * npv(hi) > 0:
+        return None
+    for _ in range(200):
+        mid = (lo + hi) / 2
+        if npv(lo) * npv(mid) <= 0:
+            hi = mid
+        else:
+            lo = mid
+    return (lo + hi) / 2
+
+
+def savings_plan(series: list, monthly: float, start: str, fee: float = 0.0) -> dict | None:
+    """Buy `monthly` EUR (minus `fee`) of fractional units on the first trading day of every month from `start`."""
+    s = [x for x in series if x[0] >= start]
+    if len(s) < 25:
+        return None
+    buys, seen = [], set()
+    for d, p in s:
+        if d[:7] not in seen:  # first trading day of each month
+            seen.add(d[:7])
+            buys.append((d, p))
+    units = paid = 0.0
+    timeline, flows, bi = [], [], 0
+    worst = (0.0, s[0][0], 0.0, 0.0)  # (value/paid - 1, date, paid, value) at the lowest point
+    for d, p in s:
+        while bi < len(buys) and buys[bi][0] <= d:
+            units += max(monthly - fee, 0) / buys[bi][1]
+            paid += monthly
+            flows.append((buys[bi][0], -monthly))
+            bi += 1
+        value = units * p
+        if paid and value / paid - 1 < worst[0]:
+            worst = (value / paid - 1, d, paid, value)
+        if not timeline or timeline[-1][0][:7] != d[:7] or d == s[-1][0]:
+            timeline.append([d, round(paid, 2), round(value, 2)])
+        else:
+            timeline[-1] = [d, round(paid, 2), round(value, 2)]
+    last_d, last_p = s[-1]
+    value = units * last_p
+    return {"start": buys[0][0], "end": last_d, "months": len(buys), "paid": paid, "value": value, "gain": value - paid,
+            "gain_pct": value / paid - 1 if paid else None, "units": units, "avg_price": (paid - fee * len(buys)) / units if units else None,
+            "price": last_p, "xirr": xirr(flows + [(last_d, value)]), "fees": fee * len(buys),
+            "worst": {"pct": worst[0], "date": worst[1], "paid": worst[2], "value": worst[3]}, "timeline": timeline}
+
+
+def project(value: float, monthly: float, years: int, rate: float) -> float:
+    """Future value: today's pot plus the same monthly amount, growing at a steady yearly `rate` (an illustration)."""
+    rm, n = (1 + rate) ** (1 / 12) - 1, 12 * years
+    return value * (1 + rate) ** years + (monthly * ((1 + rm) ** n - 1) / rm if rm else monthly * n)
+
+
 def instrument(data: dict, ticker: str) -> dict | None:
     rows = {r["t"]: r for r in screen(data)}
     r = rows.get(ticker)

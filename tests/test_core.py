@@ -254,6 +254,25 @@ def test_compare_and_correlation():
     assert market.compare({"closes": {"VWCE.DE": a}}, ["VWCE.DE"]) is None  # one instrument isn't a comparison
 
 
+def test_savings_plan_math():
+    from datetime import date, timedelta
+    from src import market
+    days = [(date(2022, 1, 1) + timedelta(days=i)).isoformat() for i in range(3 * 365)]
+    flat = market.savings_plan([[d, 50.0] for d in days], 100, "2022-01-01", fee=1)
+    n = flat["months"]
+    assert n == 36 and abs(flat["paid"] - 3600) < 1e-9 and abs(flat["value"] - 99 * n) < 1e-6, flat
+    assert abs(flat["avg_price"] - 50) < 1e-9 and flat["xirr"] < 0  # fees are the only change
+    grow = [[d, 100 * 1.12 ** (i / 365)] for i, d in enumerate(days)]  # exactly +12 %/yr
+    g = market.savings_plan(grow, 100, "2022-01-01")
+    assert abs(g["xirr"] - .12) < 1e-4 and g["value"] > g["paid"] and g["avg_price"] < g["price"], g["xirr"]
+    crash = [[d, 100.0 if i < 180 else 50.0] for i, d in enumerate(days)]
+    w = market.savings_plan(crash, 100, "2022-01-01")["worst"]
+    assert w["pct"] < -.4 and w["date"] >= days[180], w
+    assert abs(market.project(1000, 0, 10, .05) - 1000 * 1.05 ** 10) < 1e-6
+    assert abs(market.project(0, 100, 5, 0) - 6000) < 1e-9
+    assert market.savings_plan([[d, 50.0] for d in days[:10]], 100, days[0]) is None  # too little history
+
+
 if __name__ == "__main__":
     tests =[v for k, v in sorted(globals().items()) if k.startswith("test_")]
     for t in tests:
