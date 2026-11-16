@@ -317,6 +317,30 @@ def test_signal_trends_from_snapshots():
     assert s["markets"]["m1"] == [.6, 1000000] and {x["sector"] for x in s["sectors"]} == {"Crypto", "Macro"}
 
 
+def test_ipo_calendar():
+    from datetime import date
+    from src import ipos
+    today = date(2026, 11, 16)
+    raw = {"ipoCalendar": [  # Finnhub's documented shape
+        {"date": "2026-12-04", "exchange": "NASDAQ", "name": "Later Co", "numberOfShares": 1e7, "price": "18-20", "status": "expected", "symbol": "LATR", "totalSharesValue": 2.5e8},
+        {"date": "2026-11-20", "exchange": "NYSE", "name": "Soon Inc", "numberOfShares": None, "price": "", "status": "expected", "symbol": "SOON", "totalSharesValue": None},
+        {"date": "2026-11-10", "exchange": "NASDAQ", "name": "Done Ltd", "price": "12", "status": "priced", "symbol": "DONE", "totalSharesValue": 9e7},
+        {"date": "2026-11-25", "exchange": "NYSE", "name": "Gone Corp", "status": "withdrawn", "symbol": "GONE"},
+        {"date": None, "exchange": "NASDAQ", "name": "Someday Bio", "status": "filed", "symbol": ""}]}
+    rows = ipos.normalize(raw, today)
+    assert [r["name"] for r in rows] == ["Soon Inc", "Later Co", "Someday Bio", "Done Ltd"], [r["name"] for r in rows]
+    assert rows[1]["text"] == "Expected to list on NASDAQ on 4 Dec at $18–$20 a share, raising about $250M."
+    assert rows[2]["text"].startswith("Has filed to go public on NASDAQ") and rows[3]["text"].startswith("Listed on NASDAQ on 10 Nov at $12")
+    assert ipos.normalize({}, today) == [] and ipos.normalize(None, today) == []
+    assert ipos.clean_watch({"name": "Lenskart", "exchange": "NSE", "date": "2026-12-01"})["date"] == "2026-12-01"
+    for bad in ({"name": "x"}, {"name": "Ok Co", "date": "soon"}, {"name": "Ok Co", "link": "javascript:alert(1)"}):
+        try:
+            ipos.clean_watch(bad)
+            raise AssertionError(f"accepted {bad}")
+        except ValueError:
+            pass
+
+
 if __name__ == "__main__":
     tests =[v for k, v in sorted(globals().items()) if k.startswith("test_")]
     for t in tests:

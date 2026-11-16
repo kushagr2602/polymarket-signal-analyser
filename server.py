@@ -414,6 +414,52 @@ def delete_alert(aid: str, request: Request):
     return _alerts()
 
 
+# ---------------------------------------------------------------- IPOs
+
+@app.get("/api/ipos")
+def get_ipos(request: Request):
+    import requests
+    from src import ipos
+    cal, err = [], None
+    try:
+        cal = cached("ipos", 6 * 3600, ipos.fetch)
+    except LookupError:
+        err = "nokey"
+    except requests.HTTPError as e:  # never echo str(e): the failing URL contains the API key
+        code = e.response.status_code if e.response is not None else "?"
+        err = f"The IPO calendar answered {code}" + (" — check FINNHUB_API_KEY." if code in (401, 403) else ".")
+    except Exception:
+        err = "Couldn't reach the IPO calendar right now."
+    return {"calendar": cal, "error": err, "watch": ipos.load_watch() if is_local(request) else None}
+
+
+class IpoWatch(BaseModel):
+    name: str
+    exchange: str = ""
+    date: str = ""
+    link: str = ""
+    note: str = ""
+
+
+@app.post("/api/ipos/watch")
+def add_ipo_watch(body: IpoWatch, request: Request):
+    local_only(request)
+    from src import ipos
+    try:
+        ipos.save_watch(ipos.load_watch() + [ipos.clean_watch(body.model_dump())])
+    except ValueError as e:
+        raise HTTPException(400, str(e))
+    return get_ipos(request)
+
+
+@app.delete("/api/ipos/watch/{wid}")
+def delete_ipo_watch(wid: str, request: Request):
+    local_only(request)
+    from src import ipos
+    ipos.save_watch([w for w in ipos.load_watch() if w["id"] != wid])
+    return get_ipos(request)
+
+
 @app.get("/api/trades/template.csv")
 def trades_template():
     from fastapi.responses import PlainTextResponse

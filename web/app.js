@@ -148,9 +148,9 @@ function pollRescan() {
 }
 
 /* ---------- router ---------- */
-const ROUTES = { screener: vScreener, i: vInstrument, portfolio: vPortfolio, compare: vCompare, plan: vPlan, alerts: vAlerts, overview: vOverview, signals: vSignals, news: vNews, ask: vAsk, brief: vBrief };
+const ROUTES = { screener: vScreener, i: vInstrument, portfolio: vPortfolio, compare: vCompare, plan: vPlan, alerts: vAlerts, ipos: vIpos, overview: vOverview, signals: vSignals, news: vNews, ask: vAsk, brief: vBrief };
 const NEEDS_SIGNALS = new Set(['overview', 'signals', 'brief']);  // views that read the Polymarket database
-const TITLES = { screener: 'Screener', portfolio: 'Portfolio', compare: 'Compare', plan: 'Savings plan', alerts: 'Alerts', overview: 'Predictions', signals: 'Signals', news: 'News', ask: 'Ask', brief: 'Brief' };
+const TITLES = { screener: 'Screener', portfolio: 'Portfolio', compare: 'Compare', plan: 'Savings plan', alerts: 'Alerts', ipos: 'IPOs', overview: 'Predictions', signals: 'Signals', news: 'News', ask: 'Ask', brief: 'Brief' };
 function parseHash() {
   const [p0, qs = ''] = location.hash.replace(/^#\/?/, '').split('?');
   const [p, ...rest] = p0.split('/');
@@ -201,7 +201,7 @@ function vOverview() {
     <p class="lede">${plural(top.n, 'live signal')} and <b>${money(top.volume)}</b> of money behind them, peaking at <b>${top.peak}/10</b>.
       ${top.soon != null ? `The nearest one closes in <b>${plural(top.soon, 'day')}</b>.` : ''}</p>
     <div class="cta"><a class="btn primary lg" href="${sigLink({ sector: top.sector })}">Open these signals →</a>
-      <a class="btn lg" href="#/ask">Ask the desk</a></div>`
+      <a class="btn lg" href="#/brief">Read today’s brief</a></div>`
     : `<h1 class="display">Nothing is running hot yet.</h1><p class="lede">No sector has a signal scoring 5 or above right now.</p>`;
   const cells = [...active].sort((a, b) => b.score - a.score || b.volume - a.volume).slice(0, 48);
 
@@ -932,6 +932,53 @@ function alPaint() {
   const pb = $('#al-perm'); if (pb) pb.onclick = async () => { await Notification.requestPermission(); await refreshAlerts(S.al); alPaint(); };
   $$('[data-del]', $('#al')).forEach(b => b.onclick = async () => {
     try { await refreshAlerts(await api('/api/alerts/' + enc(b.dataset.del), { method: 'DELETE' })); alPaint(); toast('Alert deleted.'); }
+    catch (err) { toast(err.message, true); }
+  });
+}
+
+/* ---------- IPOs ---------- */
+async function vIpos() {
+  view.innerHTML = `<div class="page-h fade"><div class="eyebrow">IPOs</div><h1>Companies about to go public</h1>
+    <p>An IPO is when a company first sells shares to the public. Exciting, but read the basics below before you get swept up.</p></div>
+    <div class="note info" style="margin-top:22px"><span>i</span><p>As a private investor in Europe you usually can’t buy at the IPO price: you buy once it starts trading, often after a first-day jump. The first weeks can swing wildly, and studies have long found that new listings on average lag the wider market over the following years. Indian IPOs work differently: you apply during a subscription window through your broker (Zerodha, for example) and only get shares if they’re allotted to you.</p></div>
+    <div id="ipo"><div class="loading sm">${orbHTML(56, 'Checking the calendar…')}</div></div>`;
+  mountOrbs(view);
+  try { S.ipo = await api('/api/ipos'); } catch (e) { if ($('#ipo')) $('#ipo').innerHTML = `<div class="empty">${esc(e.message)}</div>`; return; }
+  if ($('#ipo')) ipoPaint();
+}
+
+function ipoRow(i) {
+  return `<div class="ipo-r"><span class="cat-d${i.upcoming && i.date && (new Date(i.date) - Date.now()) / 864e5 <= 7 ? ' hot' : ''}">${i.date ? fmtDate(i.date, true).replace(/ \d{4}$/, '') : 'TBA'}</span>
+    <span><b>${esc(i.name)}</b> <small>${esc([i.symbol, i.exchange].filter(Boolean).join(' · '))}</small><br><small class="ipo-t">${esc(i.text)}</small></span>
+    <span class="ipo-s ${i.status}">${esc(i.status)}</span></div>`;
+}
+
+function ipoPaint() {
+  const I = S.ipo, up = I.calendar.filter(i => i.upcoming), done = I.calendar.filter(i => !i.upcoming);
+  const keyMsg = `<div class="card" style="margin-top:22px"><h3>Turn on the US IPO calendar</h3><p class="sub" style="margin-bottom:0">It uses Finnhub’s IPO calendar with your own free key: sign up at <a href="https://finnhub.io/register" target="_blank" rel="noopener">finnhub.io</a>, add <code>FINNHUB_API_KEY=…</code> to your <code>.env</code>, and restart the app. Indian and European listings you hear about can go in your watch list below.</p></div>`;
+  $('#ipo').innerHTML = (I.error === 'nokey' ? keyMsg : I.error ? `<div class="note warn" style="margin-top:22px"><span>!</span><p>${esc(I.error)}</p></div>` : '') +
+    (up.length ? `<div class="sh"><h2>Coming up</h2><span class="more">US listings · Finnhub</span></div><div class="tl">${up.map(ipoRow).join('')}</div>` : (!I.error ? '<div class="empty">No US listings scheduled in the next three months.</div>' : '')) +
+    (done.length ? `<div class="sh"><h2>Recently listed</h2></div><div class="tl">${done.slice(0, 12).map(ipoRow).join('')}</div>` : '') +
+    (I.watch ? `<div class="sh"><h2>IPOs I’m watching</h2><span class="more">private · this computer only</span></div>
+      <p class="sub">For listings the calendar doesn’t cover, like Indian IPOs on NSE/BSE or European ones you read about. Add the expected date and you’ll see the countdown.</p>
+      <div class="card"><form id="ipf" class="tform ipo-form">
+        <label>Company<input class="in" name="name" required maxlength="80" placeholder="e.g. a company you read about"></label>
+        <label>Exchange<input class="in" name="exchange" maxlength="30" placeholder="NSE, Xetra…"></label>
+        <label>Expected date<input class="in" name="date" type="date"></label>
+        <label>Link (optional)<input class="in" name="link" type="url" placeholder="https://…"></label>
+        <button class="btn primary" type="submit">Watch it</button></form></div>
+      ${I.watch.length ? `<div class="tl">${I.watch.map(w => { const dd = w.date ? Math.ceil((new Date(w.date) - Date.now()) / 864e5) : null;
+        return `<div class="ipo-r"><span class="cat-d${dd != null && dd <= 7 && dd >= 0 ? ' hot' : ''}">${dd == null ? 'TBA' : dd > 0 ? `in ${dd}d` : dd === 0 ? 'today' : 'listed'}</span>
+          <span><b>${esc(w.name)}</b> <small>${esc(w.exchange || '')}${w.date ? ' · ' + fmtDate(w.date, true) : ''}</small>${w.link ? `<br><small><a href="${esc(w.link)}" target="_blank" rel="noopener">${esc(w.link.replace(/^https?:\/\//, '').slice(0, 60))} ↗</a></small>` : ''}</span>
+          <button class="btn sm ghost" data-del="${esc(w.id)}" type="button">Remove</button></div>`; }).join('')}</div>` : ''}` : '');
+  const f = $('#ipf');
+  if (f) f.onsubmit = async e => {
+    e.preventDefault();
+    try { S.ipo = await api('/api/ipos/watch', { method: 'POST', body: Object.fromEntries(new FormData(f)) }); ipoPaint(); toast('Added to your IPO watch list.'); }
+    catch (err) { toast(err.message, true); }
+  };
+  $$('[data-del]', $('#ipo')).forEach(b => b.onclick = async () => {
+    try { S.ipo = await api('/api/ipos/watch/' + enc(b.dataset.del), { method: 'DELETE' }); ipoPaint(); toast('Removed.'); }
     catch (err) { toast(err.message, true); }
   });
 }

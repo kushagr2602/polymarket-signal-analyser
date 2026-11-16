@@ -561,3 +561,14 @@ a.hr:hover { background: var(--surface); }
 .nav a { padding: 7px 8px; font-size: 13.5px; }
 .nav a.on::after { left: 8px; right: 8px; }
 @media (max-width: 1360px) { .fresh span { display: none; } }
+
+/* ---------- IPOs ---------- */
+.ipo-r { display: grid; grid-template-columns: 76px 1fr auto; gap: 14px; align-items: center; padding: 13px 6px; border-bottom: 1px solid var(--line2); font-size: 14.5px; }
+.ipo-r small { color: var(--muted); font-size: 12.5px; }
+.ipo-r .ipo-t { color: var(--soft); font-size: 13.5px; }
+.ipo-r a { color: var(--accent); text-decoration: none; }
+.ipo-s { font: 600 10.5px var(--ff-m); letter-spacing: .1em; text-transform: uppercase; color: var(--muted); }
+.ipo-s.expected { color: var(--accent); } .ipo-s.priced { color: var(--teal); }
+.ipo-form { grid-template-columns: 1.6fr 1fr 1fr 1.4fr auto; }
+@media (max-width: 1020px) { .ipo-form { grid-template-columns: 1fr 1fr; } }
+@media (max-width: 720px) { .ipo-form { grid-template-columns: 1fr; } .ipo-r { grid-template-columns: 64px 1fr; } .ipo-s { display: none; } }

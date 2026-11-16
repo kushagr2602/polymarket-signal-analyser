@@ -17,3 +17,5 @@ services:
         sync: false
       - key: OPENAI_API_KEY
         sync: false
+      - key: FINNHUB_API_KEY   # optional: IPO calendar
+        sync: false

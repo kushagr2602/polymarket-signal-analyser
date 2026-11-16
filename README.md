@@ -60,6 +60,15 @@ python3 tests/eval_filter.py        # eval the filter against the labeled set
   dates, `1.234,56` numbers). Average-cost positions, P&L, how today's mix would have behaved, and plain-English notes on
   concentration and overlap. **Private by design:** trades live in `data/trades.json` (gitignored) and the API refuses
   portfolio requests that don't come straight from localhost, so a hosted copy can never expose them.
+- **Broker imports**: Revolut account statement, Interactive Brokers activity statement / Flex query, Zerodha tradebook —
+  detected from the file's headers. Trades keep their currency and convert to EUR at the trade date's rate.
+- **Active funds + India**: BIT Capital, ARK, Fidelity and Parag Parikh funds, each compared with a cheap index ETF;
+  Nifty ETFs and Indian large caps.
+- **Ask**: the agent can also screen, look up and compare instruments, and (on your own machine only) read your portfolio.
+- **Compare** 2–4 instruments (growth of €1,000, side-by-side numbers, weekly-return correlation), **Savings plan**
+  replays a monthly Sparplan on real prices, **Alerts** watch prices (local), **IPOs** show Finnhub's US calendar
+  (`FINNHUB_API_KEY`) plus a private watch list, and the scanner saves **snapshots** for signal trends (run the
+  `snapshots` SQL in schema.sql once).
 - Not investment advice: it ranks and explains; it never tells you to buy or sell, and it never places trades.
 
 ## The web app
