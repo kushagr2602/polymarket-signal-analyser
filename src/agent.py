@@ -49,6 +49,11 @@ TOOLS = [
         "parameters": {"type": "object", "properties": {"ticker": {"type": "string", "description": "e.g. VWCE.DE, ASML.AS, NVDA"}},
                        "required": ["ticker"]}}},
     {"type": "function", "function": {
+        "name": "compare_instruments",
+        "description": "Compare 2-4 screener instruments: key metrics side by side, a plain summary (who grew most, calmest, smallest worst fall) and how closely each pair moves together (correlation of daily returns; >=0.9 means owning both adds little spread).",
+        "parameters": {"type": "object", "properties": {"tickers": {"type": "array", "items": {"type": "string"}, "description": "2-4 tickers, e.g. [\"VWCE.DE\", \"SXR8.DE\"]"}},
+                       "required": ["tickers"]}}},
+    {"type": "function", "function": {
         "name": "get_latest_brief",
         "description": "Fetch the most recent daily analyst brief (markdown).",
         "parameters": {"type": "object", "properties": {}}}},
@@ -125,6 +130,18 @@ def get_instrument(ticker: str) -> dict:
             "facts": [{"label": c["label"], "value": c["value"], "plain": c["plain"]} for c in r["cards"]]}
 
 
+def compare_instruments(tickers: list[str]) -> dict:
+    from . import market
+    data, _ = _screen()
+    c = market.compare(data, [t.strip().upper() for t in tickers])
+    if not c:
+        return {"error": "Need at least two tickers that are in the screener."}
+    r2 = lambda x: None if x is None else round(x, 3)
+    return {"items": [{"ticker": i["t"], "name": i["name"], "score": i["score"], "last_12m": r2(i["m"]["r1y"]), "growth_per_year": r2(i["m"]["growth"]),
+                       "swing": r2(i["m"]["vol"]), "worst_fall": r2(i["m"]["mdd"]), "return_for_risk": r2(i["m"]["rpr"])} for i in c["items"]],
+            "summary": c["summary"], "pairs": c["pairs"]}
+
+
 def get_my_portfolio() -> dict:
     from . import portfolio
     data, rows = _screen()
@@ -142,7 +159,8 @@ def get_my_portfolio() -> dict:
 
 
 _IMPL = {"query_signals": query_signals, "get_latest_brief": get_latest_brief, "portfolio_exposure": portfolio_exposure,
-         "screen_instruments": screen_instruments, "get_instrument": get_instrument, "get_my_portfolio": get_my_portfolio}
+         "screen_instruments": screen_instruments, "get_instrument": get_instrument, "get_my_portfolio": get_my_portfolio,
+         "compare_instruments": compare_instruments}
 
 
 def tools_for(private: bool) -> list[dict]:

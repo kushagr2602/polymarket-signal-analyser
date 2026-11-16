@@ -206,6 +206,15 @@ def instrument(ticker: str):
     return r
 
 
+@app.get("/api/compare")
+def compare(t: str):
+    from src import market
+    r = market.compare(market.load(), [x.strip().upper() for x in t.split(",") if x.strip()][:4])
+    if not r:
+        raise HTTPException(400, "Pick at least two instruments from the screener.")
+    return r
+
+
 @app.post("/api/explain/{ticker}")
 def explain(ticker: str, request: Request):
     """Beginner-friendly write-up of one instrument, from the computed numbers only (cached per day)."""

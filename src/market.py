@@ -323,6 +323,65 @@ def vs_index(r: dict, b: dict) -> dict | None:
             "tone": "good" if d > .02 else "bad" if d < 0 else "neutral"}
 
 
+def correlation(a: list, b: list, days: int = 3 * 365) -> float | None:
+    """How closely two EUR price series move together: Pearson r of WEEKLY returns over the last `days`.
+    Weekly, not daily: fund NAVs are published a day late and US/European markets close hours apart, which makes
+    daily returns line up wrong (BIT's fund vs a world ETF read 0.17 daily, 0.52 weekly)."""
+    def weekly(s):
+        w = {}
+        for d, p in s:
+            y, k, _ = date.fromisoformat(d).isocalendar()
+            w[(y, k)] = p  # last price of each ISO week
+        return w
+    if not a or not b:
+        return None
+    cut = (date.fromisoformat(min(a[-1][0], b[-1][0])) - timedelta(days=days)).isoformat()
+    wa, wb = weekly([x for x in a if x[0] >= cut]), weekly([x for x in b if x[0] >= cut])
+    ks = sorted(set(wa) & set(wb))
+    pairs = [(math.log(wa[y] / wa[x]), math.log(wb[y] / wb[x])) for x, y in zip(ks, ks[1:])
+             if min(wa[x], wa[y], wb[x], wb[y]) > 0]
+    if len(pairs) < 26:  # half a year of weeks, minimum
+        return None
+    ma, mb = sum(p[0] for p in pairs) / len(pairs), sum(p[1] for p in pairs) / len(pairs)
+    cov = sum((x - ma) * (y - mb) for x, y in pairs)
+    va, vb = sum((x - ma) ** 2 for x, _ in pairs), sum((y - mb) ** 2 for _, y in pairs)
+    return cov / math.sqrt(va * vb) if va and vb else None
+
+
+def compare(data: dict, tickers: list[str]) -> dict | None:
+    """2-4 instruments side by side, with a plain-English summary and how much each pair moves together."""
+    rows = {r["t"]: r for r in screen(data)}
+    items = [rows[t] for t in dict.fromkeys(tickers) if t in rows][:4]
+    if len(items) < 2:
+        return None
+    name = lambda r: r["name"]
+    def best(key, low=False):
+        have = [r for r in items if r["m"].get(key) is not None]
+        return (min if low else max)(have, key=lambda r: r["m"][key]) if have else None
+    span = "a year (3 yrs)" if not any(r["m"]["short"] for r in items) else "(mixed history lengths — treat with care)"
+    summary = []
+    if (g := best("growth")):
+        summary.append(f"Grew the most: {name(g)}, {g['m']['growth']:+.0%} {span}.")
+    if (v := best("vol", low=True)):
+        summary.append(f"Calmest ride: {name(v)}, typically swinging about ±{v['m']['vol']:.0%} in a year.")
+    if (d := best("mdd")):
+        summary.append(f"Held up best in sell-offs: {name(d)}, worst fall {d['m']['mdd']:.0%}.")
+    if (q := best("rpr")):
+        summary.append(f"Most return for the risk: {name(q)} ({q['m']['rpr']:.2f}).")
+    pairs = []
+    for i, x in enumerate(items):
+        for y in items[i + 1:]:
+            r = correlation(data["closes"][x["t"]], data["closes"][y["t"]])
+            if r is None:
+                continue
+            plain = (f"{name(x)} and {name(y)} move almost in lockstep — owning both adds very little spread." if r >= .9 else
+                     f"{name(x)} and {name(y)} move together most of the time — some extra spread, not much." if r >= .6 else
+                     f"{name(x)} and {name(y)} often move differently — combining them spreads your risk more.")
+            pairs.append({"a": x["t"], "b": y["t"], "r": round(r, 2), "plain": plain})
+    return {"items": [{k: r[k] for k in ("t", "name", "kind", "group", "ccy", "score", "why", "m")} for r in items],
+            "series": {r["t"]: data["closes"][r["t"]] for r in items}, "summary": summary, "pairs": pairs}
+
+
 def instrument(data: dict, ticker: str) -> dict | None:
     rows = {r["t"]: r for r in screen(data)}
     r = rows.get(ticker)

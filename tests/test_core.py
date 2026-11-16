@@ -236,6 +236,24 @@ def test_broker_imports_and_currency():
     assert missing == {"INR"}
 
 
+def test_compare_and_correlation():
+    from datetime import date, timedelta
+    from src import market
+    days = [(date(2023, 1, 2) + timedelta(days=i)).isoformat() for i in range(1200)]
+    a, p = [], 100.0
+    for i, d in enumerate(days):  # wobbly but rising
+        p *= 1.012 if i % 3 else .985
+        a.append([d, p])
+    same = [[d, v * 2] for d, v in a]                       # same moves, different price level
+    opposite = [[d, 1e4 / v] for d, v in a]                 # every up day is a down day
+    assert abs(market.correlation(a, same) - 1) < 1e-9
+    assert abs(market.correlation(a, opposite) + 1) < 1e-9
+    c = market.compare({"closes": {"VWCE.DE": a, "EUNL.DE": opposite}}, ["VWCE.DE", "EUNL.DE", "NOPE"])
+    assert [i["t"] for i in c["items"]] == ["VWCE.DE", "EUNL.DE"]  # unknown tickers dropped
+    assert c["summary"][0].startswith("Grew the most: Vanguard") and "often move differently" in c["pairs"][0]["plain"], c
+    assert market.compare({"closes": {"VWCE.DE": a}}, ["VWCE.DE"]) is None  # one instrument isn't a comparison
+
+
 if __name__ == "__main__":
     tests =[v for k, v in sorted(globals().items()) if k.startswith("test_")]
     for t in tests:

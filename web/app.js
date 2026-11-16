@@ -147,9 +147,9 @@ function pollRescan() {
 }
 
 /* ---------- router ---------- */
-const ROUTES = { screener: vScreener, i: vInstrument, portfolio: vPortfolio, overview: vOverview, signals: vSignals, news: vNews, ask: vAsk, brief: vBrief };
+const ROUTES = { screener: vScreener, i: vInstrument, portfolio: vPortfolio, compare: vCompare, overview: vOverview, signals: vSignals, news: vNews, ask: vAsk, brief: vBrief };
 const NEEDS_SIGNALS = new Set(['overview', 'signals', 'brief']);  // views that read the Polymarket database
-const TITLES = { screener: 'Screener', portfolio: 'Portfolio', overview: 'Predictions', signals: 'Signals', news: 'News', ask: 'Ask', brief: 'Brief' };
+const TITLES = { screener: 'Screener', portfolio: 'Portfolio', compare: 'Compare', overview: 'Predictions', signals: 'Signals', news: 'News', ask: 'Ask', brief: 'Brief' };
 function parseHash() {
   const [p0, qs = ''] = location.hash.replace(/^#\/?/, '').split('?');
   const [p, ...rest] = p0.split('/');
@@ -589,7 +589,8 @@ async function vInstrument(q, t) {
   <div class="ih fade">
     <div><div class="eyebrow">${esc(r.group)} · ${kindL} · ${esc(r.t)}</div><h1>${esc(r.name)}</h1>
       <p class="ih-sub"><b>€${fmtPrice(m.price)}</b> <span class="${tone(m.r1d)}">${pc(m.r1d)} on the day</span> · as of ${fmtDate(m.asof, true)}${r.ccy !== 'EUR' ? ` · converted from ${r.ccy === 'GBp' ? 'GBP' : esc(r.ccy)}` : ''}</p>
-      <p class="ih-why">${esc(r.why)}</p></div>
+      <p class="ih-why">${esc(r.why)}</p>
+      <a class="btn" style="margin-top:16px" href="#/compare?t=${enc([r.t, r.bench].filter(Boolean).join(','))}">Compare with others →</a></div>
     <div class="ih-score"><div class="big" style="color:${conv(5 + r.score / 20)}">${r.score}</div><div class="l">score / 100</div><div class="rk">#${r.rank} of ${r.of} ${noun} here</div></div>
   </div>
   <div class="card chart-card"><div class="chart-top"><div class="readout" id="ro"></div>
@@ -658,6 +659,106 @@ function priceChart(series, range) {
     cx.setAttribute('x1', X(i)); cx.setAttribute('x2', X(i)); cx.setAttribute('opacity', 1);
     cd.setAttribute('cx', X(i)); cd.setAttribute('cy', Y(p[1])); cd.setAttribute('opacity', 1);
     ro.innerHTML = `<b>${fmtDate(p[0], true)}</b> · €${fmtPrice(p[1])} · €1,000 from the start of this chart → <b class="${tone(p[1] / base - 1)}">${eur(p[1])}</b>`;
+  };
+  hit.onmouseleave = rest;
+}
+
+/* ---------- compare ---------- */
+const CMP_COL = ['var(--teal)', 'var(--accent)', 'var(--violet)', 'var(--rose)'];
+const PRESETS = [['World vs S&P 500', 'VWCE.DE,SXR8.DE'], ['Two world ETFs', 'VWCE.DE,EUNL.DE'], ['BIT tech vs index tech', '0P0001MZUC.F,XDWT.DE,SXRV.DE'],
+                 ['Active tech funds', '0P0001MZUC.F,0P00015OFP.F,ARKK.MI'], ['India: index vs active', 'NIFTYBEES.NS,0P0000YWL1.BO'], ['Shares vs bonds vs gold', 'VWCE.DE,VAGF.DE,4GLD.DE']];
+
+async function vCompare(q) {
+  const ts = [...new Set((q.get('t') || '').split(',').map(x => x.trim().toUpperCase()).filter(Boolean))].slice(0, 4);
+  if (!S.screen) { try { S.screen = await api('/api/screen'); } catch (e) { /* the compare call below reports it */ } }
+  const rows = S.screen ? S.screen.rows : [], byT = Object.fromEntries(rows.map(r => [r.t, r]));
+  const go = list => { location.hash = '#/compare' + (list.length ? '?t=' + enc(list.join(',')) : ''); };
+  const one = ts.length === 1 && byT[ts[0]];
+  const sugg = one ? rows.filter(r => r.kind === one.kind && r.group === one.group && r.t !== one.t).slice(0, 4).map(r => [r.name, [one.t, r.t].join(',')]) : PRESETS;
+  view.innerHTML = `
+  <div class="page-h fade"><div class="eyebrow">Compare</div><h1>Side by side</h1>
+    <p>Pick 2 to 4 funds or stocks. The chart shows what €1,000 put into each would have become, so different prices compare fairly.</p></div>
+  <div class="cmp-pick">${ts.map((t, i) => `<span class="tag"><i class="dot" style="background:${CMP_COL[i]}"></i>${esc(byT[t] ? byT[t].name : t)}<button type="button" data-rm="${esc(t)}" aria-label="Remove">✕</button></span>`).join('')}
+    ${ts.length < 4 ? `<form id="cmpf" class="cmp-add"><input class="in" id="cmpq" list="cmp-list" placeholder="${ts.length ? 'Add another…' : 'Add a fund or stock (name or ticker)'}" autocomplete="off"><datalist id="cmp-list">${rows.map(r => `<option value="${esc(r.t)}">${esc(r.name)}</option>`).join('')}</datalist></form>` : ''}</div>
+  ${ts.length < 2 ? `<div class="chips" style="margin-top:16px"><span class="lab">${one ? 'Compare with' : 'Try'}</span>${sugg.map(([l, v]) => `<a class="cf" href="#/compare?t=${enc(v)}">${esc(l)}</a>`).join('')}</div>` : ''}
+  <div id="cmp">${ts.length >= 2 ? `<div class="loading sm">${orbHTML(56, 'Lining them up…')}</div>` : ''}</div>`;
+  mountOrbs(view);
+  view.onclick = e => { const rm = e.target.closest('[data-rm]'); if (rm) go(ts.filter(t => t !== rm.dataset.rm)); };
+  const f = $('#cmpf');
+  if (f) f.onsubmit = e => {
+    e.preventDefault();
+    const v = $('#cmpq').value.trim().toLowerCase(); if (!v) return;
+    const hit = rows.find(r => r.t.toLowerCase() === v) || rows.find(r => r.name.toLowerCase().includes(v) || r.t.toLowerCase().includes(v));
+    if (!hit) return toast('Not in the screener list — try the name or ticker as shown there.', true);
+    go([...ts, hit.t]);
+  };
+  const cq = $('#cmpq'); if (cq) cq.onchange = () => f.requestSubmit();
+  if (ts.length < 2) return;
+  let c;
+  try { c = await api('/api/compare?t=' + enc(ts.join(','))); }
+  catch (e) { if ($('#cmp')) $('#cmp').innerHTML = `<div class="empty">${esc(e.message)}</div>`; return; }
+  if (!$('#cmp')) return;
+  const col = Object.fromEntries(c.items.map((it, i) => [it.t, CMP_COL[ts.indexOf(it.t) >= 0 ? ts.indexOf(it.t) : i]]));
+  const ROWS = [['Score', it => it.score, v => v, 1], ['Last 12 months', it => it.m.r1y, v => pc(v), 1], ['Growth per year', it => it.m.growth, v => pc(v), 1],
+                ['Swing (volatility)', it => it.m.vol, v => pc(v, false), -1], ['Worst fall', it => it.m.mdd, v => pc(v), 1], ['Return for the risk', it => it.m.rpr, v => v == null ? '—' : v.toFixed(2), 1]];
+  $('#cmp').innerHTML = `
+  <div class="card chart-card" style="margin-top:22px"><div class="chart-top"><div class="readout" id="cro"></div>
+    <div class="seg" id="crng" role="group" aria-label="Chart range">${['1Y', '3Y', '5Y'].map(x => `<button type="button" data-r="${x}" class="${x === '3Y' ? 'on' : ''}">${x}</button>`).join('')}</div></div>
+    <svg class="pchart" id="cpc" role="img" aria-label="Growth of 1,000 euros in each instrument"></svg></div>
+  <div class="grid2" style="margin-top:28px">
+    <div class="card"><h3>In plain English</h3><ul class="plain">${c.summary.map(s => `<li>${esc(s)}</li>`).join('')}</ul>
+      ${c.pairs.length ? `<h3 style="margin-top:22px">Do they actually spread your risk?</h3><p class="sub">“Moving together” runs from 1 (always rise and fall together) to 0 (unrelated), measured on weekly returns over 3 years. Close to 1 means owning both is almost like owning one.</p>
+      ${c.pairs.map(p => `<div class="pair"><b style="color:${p.r >= .9 ? 'var(--red)' : p.r >= .6 ? 'var(--accent)' : 'var(--teal)'}">${p.r.toFixed(2)}</b><span>${esc(p.plain)}</span></div>`).join('')}` : ''}</div>
+    <div class="card"><h3>The numbers</h3><table class="ctab"><thead><tr><th></th>${c.items.map(it => `<th><a href="#/i/${enc(it.t)}"><i class="dot" style="background:${col[it.t]}"></i>${esc(it.name)}</a></th>`).join('')}</tr></thead>
+      <tbody>${ROWS.map(([l, get, fmt, dir]) => { const vals = c.items.map(get), ok = vals.filter(v => v != null), best = ok.length ? (dir > 0 ? Math.max(...ok) : Math.min(...ok)) : null;
+        return `<tr><th>${l}</th>${vals.map(v => `<td class="${v != null && v === best ? 'best' : ''}">${fmt(v)}</td>`).join('')}</tr>`; }).join('')}</tbody></table>
+      <p class="hint">Highlighted = best in that row. All in euros; growth per year uses 3 years where available.</p></div>
+  </div>
+  <p class="disc">Past performance doesn’t predict future returns. Comparing helps you understand the trade-offs; it isn’t a recommendation.</p>`;
+  let range = '3Y';
+  const draw = () => cmpChart(c, col, range);
+  draw();
+  S.ro = new ResizeObserver(() => { clearTimeout(S.rt); S.rt = setTimeout(draw, 100); }); S.ro.observe($('#cpc'));
+  $('#crng').onclick = e => { const b = e.target.closest('button'); if (!b) return; range = b.dataset.r; $$('#crng button').forEach(x => x.classList.toggle('on', x === b)); draw(); };
+}
+
+function cmpChart(c, col, range) {
+  const svg = $('#cpc'); if (!svg) return;
+  const W = svg.clientWidth, H = svg.clientHeight, M = { l: 6, r: 70, t: 14, b: 26 };
+  if (W < 140 || H < 80) return;
+  svg.setAttribute('viewBox', `0 0 ${W} ${H}`);
+  const days = { '1Y': 365, '3Y': 1095, '5Y': 1830 }[range];
+  const lastAll = c.items.map(it => c.series[it.t].at(-1)[0]).sort()[0];
+  let start = new Date(new Date(lastAll) - days * 864e5).toISOString().slice(0, 10);
+  start = [start, ...c.items.map(it => c.series[it.t][0][0])].sort().at(-1);  // common start: the youngest series decides
+  const lines = c.items.map(it => {
+    let pts = c.series[it.t].filter(p => p[0] >= start);
+    const step = Math.ceil(pts.length / 400); if (step > 1) pts = pts.filter((_, i) => i % step === 0 || i === pts.length - 1);
+    const base = pts[0][1];
+    return { it, pts: pts.map(([d, v]) => [d, 1000 * v / base]) };
+  });
+  const t0 = +new Date(start), t1 = Math.max(...lines.map(l => +new Date(l.pts.at(-1)[0])));
+  const ys = lines.flatMap(l => l.pts.map(p => p[1])); let lo = Math.min(...ys, 1000), hi = Math.max(...ys, 1000);
+  const pad = (hi - lo) * .08 || 50; lo -= pad; hi += pad;
+  const X = d => M.l + (+new Date(d) - t0) / (t1 - t0 || 1) * (W - M.l - M.r), Y = v => M.t + (hi - v) / (hi - lo) * (H - M.t - M.b);
+  let g = '';
+  for (let k = 0; k <= 3; k++) { const v = lo + (hi - lo) * (k + .5) / 4; g += `<line x1="${M.l}" x2="${W - M.r}" y1="${Y(v)}" y2="${Y(v)}" stroke="var(--line2)"/><text x="${W - M.r + 10}" y="${Y(v) + 4}">€${Math.round(v).toLocaleString('en-US')}</text>`; }
+  g += `<line x1="${M.l}" x2="${W - M.r}" y1="${Y(1000)}" y2="${Y(1000)}" stroke="var(--muted)" stroke-dasharray="2 4" opacity=".7"/>`;
+  [[start, 'start'], [new Date((t0 + t1) / 2).toISOString().slice(0, 10), 'middle'], [new Date(t1).toISOString().slice(0, 10), 'end']].forEach(([d, a]) => { g += `<text x="${X(d)}" y="${H - 6}" text-anchor="${a}">${fmtDate(d)}</text>`; });
+  svg.innerHTML = g + lines.map(l => `<path d="${l.pts.map((p, i) => `${i ? 'L' : 'M'}${X(p[0]).toFixed(1)},${Y(p[1]).toFixed(1)}`).join('')}" fill="none" stroke="${col[l.it.t]}" stroke-width="2" stroke-linejoin="round"/>`).join('') +
+    `<line id="ccx" y1="${M.t}" y2="${H - M.b}" stroke="var(--muted)" stroke-dasharray="3 3" opacity="0"/>${lines.map((l, i) => `<circle id="ccd${i}" r="4" fill="${col[l.it.t]}" stroke="var(--surface)" stroke-width="2" opacity="0"/>`).join('')}
+    <rect id="chit" x="${M.l}" y="0" width="${W - M.l - M.r}" height="${H}" fill="transparent"/>`;
+  const ro = $('#cro'), at = (pts, d) => { let lo2 = 0, hi2 = pts.length - 1; while (lo2 < hi2) { const m = (lo2 + hi2 + 1) >> 1; if (pts[m][0] <= d) lo2 = m; else hi2 = m - 1; } return pts[lo2]; };
+  const say = d => lines.map(l => { const p = at(l.pts, d); return `<span class="lg"><i class="dot" style="background:${col[l.it.t]}"></i>${esc(l.it.name)} <b class="${tone(p[1] / 1000 - 1)}">€${Math.round(p[1]).toLocaleString('en-US')}</b></span>`; }).join('');
+  const rest = () => { $('#ccx', svg).setAttribute('opacity', 0); lines.forEach((_, i) => $('#ccd' + i, svg).setAttribute('opacity', 0)); ro.innerHTML = `<span class="lg-h">€1,000 on ${fmtDate(start, true)} → today</span>` + say('9999'); };
+  rest();
+  const hit = $('#chit', svg);
+  hit.onmousemove = e => {
+    const b = svg.getBoundingClientRect(), x = (e.clientX - b.left) * (W / b.width);
+    const d = new Date(t0 + Math.max(0, Math.min(1, (x - M.l) / (W - M.l - M.r))) * (t1 - t0)).toISOString().slice(0, 10);
+    $('#ccx', svg).setAttribute('x1', X(d)); $('#ccx', svg).setAttribute('x2', X(d)); $('#ccx', svg).setAttribute('opacity', 1);
+    lines.forEach((l, i) => { const p = at(l.pts, d), dot = $('#ccd' + i, svg); dot.setAttribute('cx', X(p[0])); dot.setAttribute('cy', Y(p[1])); dot.setAttribute('opacity', 1); });
+    ro.innerHTML = `<span class="lg-h">${fmtDate(d, true)}</span>` + say(d);
   };
   hit.onmouseleave = rest;
 }
