@@ -30,7 +30,13 @@ function conv(score) {
 const scPill = s => `<span class="sc${s < 5 ? ' zero' : ''}" style="--c:${conv(s)}">${s}</span>`;
 
 /* ---------- api / toast / tooltip ---------- */
-async function api(path, opts = {}) {
+const inflight = new Map();
+function api(path, opts = {}) {  // identical GETs already in flight share one request (boot + Today both asked for /api/screen)
+  if (opts.method && opts.method !== 'GET') return apiRaw(path, opts);
+  if (!inflight.has(path)) inflight.set(path, apiRaw(path, opts).finally(() => inflight.delete(path)));
+  return inflight.get(path);
+}
+async function apiRaw(path, opts = {}) {
   const r = await fetch(path, { method: opts.method || 'GET', headers: opts.body ? { 'Content-Type': 'application/json' } : {},
                                 body: opts.body ? JSON.stringify(opts.body) : undefined });
   if (!r.ok) {
@@ -159,6 +165,11 @@ async function route(keepScroll) {
   $$('#nav a').forEach(a => a.classList.toggle('on', a.dataset.r === navKey));
   closeCmd();
   if (S.ro) { S.ro.disconnect(); S.ro = null; }
+  if (NEEDS_SIGNALS.has(path) && !S.data && S.statePromise && !S.stateErr) {  // still loading in the background: wait here, only on these pages
+    view.innerHTML = `<div class="loading">${orbHTML(64, 'Loading prediction signals…')}</div>`; mountOrbs(view);
+    await S.statePromise;
+    if (parseHash().path !== path) return;
+  }
   if (NEEDS_SIGNALS.has(path) && !S.data) {  // the screener never needs the signals database — don't let it take the app down
     view.innerHTML = `<div class="err-card fade"><h2>Prediction signals are offline</h2><p>${esc(S.stateErr || 'Still loading…')} The screener works without them.</p><a class="btn primary" href="#/screener">Open the screener</a></div>`;
     S.route = path; return;
@@ -1169,7 +1180,7 @@ addEventListener('keydown', e => {
 async function vToday() {
   const day = new Date().toLocaleDateString('en-GB', { weekday: 'long', day: 'numeric', month: 'long' });
   view.innerHTML = `<div class="page-h fade"><div class="eyebrow">${day}</div><h1>Today</h1>
-    <p>Your portfolio, the markets and what changed, in one place. Press <kbd>⌘K</kbd> to jump anywhere.</p></div>
+    <p>Your portfolio, the markets and what changed, in one place.<span class="desk-only"> Press <kbd>⌘K</kbd> to jump anywhere.</span></p></div>
     <div id="td"><div class="loading sm">${orbHTML(56, 'Pulling it together…')}</div></div>`;
   mountOrbs(view);
   const [scr, pf, ipo] = await Promise.all([S.screen ? S.screen : api('/api/screen').catch(() => null), api('/api/portfolio').catch(() => null),
@@ -1183,7 +1194,6 @@ async function vToday() {
   const movers = [...rows].filter(r => r.m.r1d != null).sort((a, b) => b.m.r1d - a.m.r1d);
   const soonIpo = ipo ? [...ipo.calendar.filter(i => i.upcoming && i.date && (new Date(i.date) - Date.now()) / 864e5 <= 7),
                          ...(ipo.watch || []).filter(w => w.date && (new Date(w.date) - Date.now()) / 864e5 <= 14 && new Date(w.date) >= Date.now() - 864e5)] : [];
-  const tr = S.data && S.data.trends, hot = S.data && S.data.hot && S.data.hot[0];
   const mvRow = r => `<a class="tdm" href="#/i/${enc(r.t)}"><span>${esc(r.name)}<small>${esc(r.t)} · ${esc(r.group)}</small></span><b class="${tone(r.m.r1d)}">${pc(r.m.r1d)}</b></a>`;
   $('#td').innerHTML = `
   <div class="td-hero fade">${T && T.n ? `<h2>Your portfolio is worth <b>${euro(T.value)}</b>, <span class="${tone(T.day)}">${euro(T.day, true)}</span> on the last trading day.</h2>
@@ -1210,11 +1220,18 @@ async function vToday() {
       <h3 style="margin-top:22px">IPOs this week</h3>
       ${soonIpo.length ? soonIpo.slice(0, 4).map(i => `<p class="td-line"><b>${esc(i.name)}</b> <span class="hint">${esc(i.exchange || '')} · ${i.date ? fmtDate(i.date, true) : 'TBA'}</span></p>`).join('')
         : `<p class="td-line">None coming up. <a href="#/ipos">See the IPO calendar →</a></p>`}</div>
-    <div class="card side-pred"><h3>Prediction markets</h3>
-      ${hot ? `<p class="td-line"><b>${esc(hot.sector)}</b> is the hottest segment: ${plural(hot.n, 'live signal')}, ${money(hot.volume)} behind them.</p>` : '<p class="td-line">No prediction signals loaded.</p>'}
-      ${tr && tr.movers && tr.movers.length ? `<p class="hint" style="margin:14px 0 4px">Odds that moved since yesterday</p>` + tr.movers.slice(0, 3).map(m => `<p class="td-line"><b class="${m.delta > 0 ? 'up' : 'down'}">${m.delta > 0 ? '+' : '−'}${Math.round(Math.abs(m.delta) * 100)} pts</b> ${esc(m.market)}</p>`).join('') : ''}
-      <a class="more" href="#/overview" style="display:inline-block;margin-top:12px">Open Predictions →</a></div>
+    <div class="card side-pred" id="pred">${predCard()}</div>
   </div>`;
+  if (!S.data && S.statePromise && !S.stateErr) S.statePromise.then(() => { const el = $('#pred'); if (el) el.innerHTML = predCard(); });
+}
+
+function predCard() {
+  const d = S.data, tr = d && d.trends, hot = d && d.hot && d.hot[0];
+  if (!d) return `<h3>Prediction markets</h3><p class="td-line">${S.stateErr ? 'Prediction signals are unavailable right now.' : 'Loading prediction signals…'}</p><a class="more" href="#/overview">Open Predictions →</a>`;
+  return `<h3>Prediction markets</h3>
+    ${hot ? `<p class="td-line"><b>${esc(hot.sector)}</b> is the hottest segment: ${plural(hot.n, 'live signal')}, ${money(hot.volume)} behind them.</p>` : '<p class="td-line">No prediction signals loaded.</p>'}
+    ${tr && tr.movers && tr.movers.length ? `<p class="hint" style="margin:14px 0 4px">Odds that moved since yesterday</p>` + tr.movers.slice(0, 3).map(m => `<p class="td-line"><b class="${m.delta > 0 ? 'up' : 'down'}">${m.delta > 0 ? '+' : '−'}${Math.round(Math.abs(m.delta) * 100)} pts</b> ${esc(m.market)}</p>`).join('') : ''}
+    <a class="more" href="#/overview" style="display:inline-block;margin-top:12px">Open Predictions →</a>`;
 }
 
 /* ---------- discover ---------- */
@@ -1321,11 +1338,26 @@ $('#cmdk-in').addEventListener('keydown', e => {
   if (e.key === 'Enter') { e.preventDefault(); runCmd(CMD.i); }
 });
 
+/* ---------- app install + offline cache ---------- */
+function registerSW() {
+  if (!('serviceWorker' in navigator)) return;
+  let on = location.protocol === 'https:';
+  try { on = on || localStorage.getItem('sw') === 'on'; } catch (e) { /* private mode */ }  // localhost: off by default, so edits aren't served stale
+  if (on) navigator.serviceWorker.register('/sw.js').catch(() => { /* the app works fine without it */ });
+  const ios = /iphone|ipad|ipod/i.test(navigator.userAgent), standalone = matchMedia('(display-mode: standalone)').matches || navigator.standalone;
+  if (ios && !standalone) $('#install-hint').textContent = ' · To install on iPhone: Share → Add to Home Screen.';
+}
+let installEv = null;
+addEventListener('beforeinstallprompt', e => { e.preventDefault(); installEv = e; $('#install').hidden = false; });
+addEventListener('appinstalled', () => { installEv = null; $('#install').hidden = true; toast('Installed. Find it in your apps.'); });
+$('#install').onclick = async () => { if (!installEv) return; installEv.prompt(); await installEv.userChoice; installEv = null; $('#install').hidden = true; };
+
 /* ---------- boot ---------- */
 (async function boot() {
   view.innerHTML = `<div class="loading">${orbHTML(72, 'Loading…')}</div>`; mountOrbs(view);
+  registerSW();
   api('/api/screen').then(x => { S.screen = x; chrome(); }).catch(() => { /* screener page will report it */ });
-  try { await loadState(); pollRescan(); } catch (e) { S.stateErr = e.message; }  // signals optional; screener still runs
-  route();
-  refreshAlerts();  // badge + browser notification for anything that fired (local only; silently skipped when hosted)
+  S.statePromise = loadState().then(pollRescan).catch(e => { S.stateErr = e.message; });  // signals are optional and load in the background
+  route();            // first paint no longer waits for the prediction database
+  refreshAlerts();    // badge + browser notification for anything that fired (local only; silently skipped when hosted)
 })();

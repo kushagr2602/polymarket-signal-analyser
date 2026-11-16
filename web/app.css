@@ -631,3 +631,35 @@ a.hr:hover { background: var(--surface); }
 .th-r i { font-style: normal; color: var(--violet); } .th-r i.spec { color: var(--accent); }
 .th-link { display: inline-block; margin-top: 6px; font-size: 12.5px; color: var(--accent); text-decoration: none; }
 @media (max-width: 720px) { .th-r { grid-template-columns: minmax(0, 1fr) 64px 64px; } .th-r > :nth-child(4), .th-r > :nth-child(5) { display: none; } }
+
+/* ---------- app mode: phone safe areas, touch, iOS zoom ---------- */
+html { -webkit-tap-highlight-color: transparent; -webkit-text-size-adjust: 100%; }
+a, button, summary, label, .cf, .tr, .sr, .lb-row { touch-action: manipulation; }
+.wrap { padding-left: max(28px, env(safe-area-inset-left)); padding-right: max(28px, env(safe-area-inset-right)); }
+.top { padding-top: env(safe-area-inset-top); }
+.fbar { top: calc(92px + env(safe-area-inset-top)); }
+.foot { padding-bottom: max(40px, calc(env(safe-area-inset-bottom) + 24px)); }
+.toast { bottom: max(28px, calc(env(safe-area-inset-bottom) + 16px)); }
+.ask-box { bottom: max(18px, calc(env(safe-area-inset-bottom) + 8px)); }
+.drawer { padding-bottom: max(40px, calc(env(safe-area-inset-bottom) + 24px)); }
+@media (max-width: 720px) {
+  .wrap { padding-left: max(18px, env(safe-area-inset-left)); padding-right: max(18px, env(safe-area-inset-right)); }
+  .in, select.in, textarea.in, #cmdk-in { font-size: 16px; }   /* under 16px iOS zooms the page when a field is focused */
+  .foot::before { left: max(18px, env(safe-area-inset-left)); right: max(18px, env(safe-area-inset-right)); }
+}
+@media (pointer: coarse) {
+  .btn { min-height: 40px; } .btn.sm { min-height: 34px; } .btn.icon { min-width: 40px; }
+  .cf { height: 38px; } .seg button { height: 36px; } .nav a { padding: 11px 10px; }
+  .cmdk-it { padding: 14px; } .tag button { width: 26px; height: 26px; }
+}
+#install[hidden] { display: none; }
+@media (display-mode: standalone) { #install { display: none; } }
+
+/* ---------- big screens: use the width, scale up on very large monitors ---------- */
+@media (min-width: 1280px) { .pulse { grid-template-columns: repeat(9, minmax(0, 1fr)); } }
+@media (min-width: 1680px) { .wrap { max-width: 1480px; } }
+/* zoom the page columns, not <body>: overlays (tooltip, toast, command bar) keep using true screen coordinates */
+@media (min-width: 2200px) { .wrap { zoom: 1.2; } }
+@media (min-width: 3000px) { .wrap { zoom: 1.45; } }
+@media (pointer: coarse) { .desk-only { display: none; } }
+@media (max-width: 720px) { .sh { flex-wrap: wrap; align-items: baseline; gap: 6px 16px; } }

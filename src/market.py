@@ -66,16 +66,21 @@ def fetch() -> dict:
     return {"fetched": time.time(), "closes": closes, "fx": {p: raw.get(p, []) for p in fxs}}
 
 
+_mem: dict | None = None  # parsed copy of data/market.json: re-parsing 3.5 MB on every API call cost ~60-100 ms each
+
+
 def load(force: bool = False) -> dict:
     """Cached closes; refetch when stale. If Yahoo is down, keep serving the last good copy."""
+    global _mem
     with _lock:  # single-flight: two requests on a cold cache must not both download 5 years of prices
-        cached = None
-        if os.path.exists(CACHE):
+        cached = _mem
+        if cached is None and os.path.exists(CACHE):
             with open(CACHE) as f:
-                cached = json.load(f)
+                cached = _mem = json.load(f)
+        if cached and not force:
             fresh = time.time() - cached["fetched"] < TTL
             complete = set(FX.values()) <= set(cached.get("fx", {})) and {i["t"] for i in UNIVERSE} <= set(cached["closes"])
-            if not force and fresh and complete:  # a universe.json edit must trigger a refetch, not silently miss tickers
+            if fresh and complete:  # a universe.json edit must trigger a refetch, not silently miss tickers
                 return cached
         try:
             data = fetch()
@@ -86,6 +91,7 @@ def load(force: bool = False) -> dict:
         os.makedirs(os.path.dirname(CACHE), exist_ok=True)
         with open(CACHE, "w") as f:
             json.dump(data, f)
+        _mem = data
         return data
 
 
@@ -319,7 +325,23 @@ def explain(m: dict, ccy: str, kind: str) -> list[dict]:
 
 # ---------------------------------------------------------------- what the API serves
 
+_screen_memo: tuple | None = None
+
+
 def screen(data: dict) -> list[dict]:
+    """Scored rows, best first. Memoised per price refresh: portfolio, alerts, compare and discover all call this, and
+    recomputing 99 instruments' metrics on every request was most of their ~0.6 s. Callers treat the rows as read-only."""
+    global _screen_memo
+    key = data.get("fetched")  # absent in hand-built test data → never memoise those
+    if key is not None and _screen_memo and _screen_memo[0] == (key, len(UNIVERSE)):
+        return _screen_memo[1]
+    rows = _screen(data)
+    if key is not None:
+        _screen_memo = ((key, len(UNIVERSE)), rows)
+    return rows
+
+
+def _screen(data: dict) -> list[dict]:
     rows = []
     for it in UNIVERSE:
         m = metrics(data["closes"].get(it["t"]) or [])
