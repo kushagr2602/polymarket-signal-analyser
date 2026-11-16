@@ -295,6 +295,28 @@ def test_price_alerts():
             pass
 
 
+def test_signal_trends_from_snapshots():
+    import math
+    from datetime import datetime, timedelta, timezone
+    from src import views
+    now = datetime(2026, 11, 16, 12, tzinfo=timezone.utc)
+    row = lambda i, sec, score, vol, prob: {"id": i, "score": score, "sector": sec, "volume": vol, "prob": prob, "market": i, "tickers": [], "days": 5}
+    rows = [row("m1", "Crypto", 9, 1e6, .60), row("m2", "Crypto", 6, 1e4, .42), row("m3", "Macro", 5, 1e5, .3)]
+    live_w = views.sector_weights(rows)["Crypto"]["w"]
+    assert abs(live_w - (5 * math.log10(1e6 + 10) + 2 * math.log10(1e4 + 10))) < 1e-9
+    snap = lambda days, w, probs: {"taken_at": (now - timedelta(days=days)).isoformat(), "sectors": [{"sector": "Crypto", "w": w}],
+                                   "markets": {k: [v, 1] for k, v in probs.items()}}
+    snaps = [snap(8, live_w / 1.5, {"m1": .40, "m2": .41}), snap(2, live_w / 1.2, {"m1": .45, "m2": .41}), snap(.2, live_w, {"m1": .59})]
+    t = views.trends(snaps, rows, now)
+    c = t["sectors"]["Crypto"]
+    assert abs(c["change"] - .5) < 1e-9 and c["vs_days"] == 8 and len(c["spark"]) == 4, c   # vs ~a week ago, not the 2-day one
+    assert t["sectors"]["Macro"]["change"] is None                                         # never in a snapshot → no fake trend
+    assert [m["market"] for m in t["movers"]] == ["m1"] and abs(t["movers"][0]["delta"] - .15) < 1e-9, t["movers"]  # vs 2 days ago; m2's 1pt wiggle ignored
+    assert views.trends([], rows, now)["movers"] == [] and views.trends([], rows, now)["sectors"]["Crypto"]["change"] is None
+    s = views.snapshot(rows)
+    assert s["markets"]["m1"] == [.6, 1000000] and {x["sector"] for x in s["sectors"]} == {"Crypto", "Macro"}
+
+
 if __name__ == "__main__":
     tests =[v for k, v in sorted(globals().items()) if k.startswith("test_")]
     for t in tests:

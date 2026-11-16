@@ -91,7 +91,15 @@ def state():
     return {"asOf": last or None, "now": datetime.now(timezone.utc).isoformat(),
             "rescanning": _rescanning(), "watchlist": wl, "models": {r: llm.active(r) for r in llm.ROLES},
             "kpis": views.kpis(rows, n_markets), "signals": rows,
-            "exposure": views.exposure(rows, wl["tickers"]), "hot": views.hot_topics(rows)}
+            "exposure": views.exposure(rows, wl["tickers"]), "hot": views.hot_topics(rows), "trends": _trends(rows)}
+
+
+def _trends(rows):
+    try:
+        snaps = cached("snaps", 900, lambda: database.get_snapshots(35))
+    except Exception:  # snapshots table not created yet — the page explains how
+        return None
+    return views.trends(snaps, rows)
 
 
 @app.get("/api/news")

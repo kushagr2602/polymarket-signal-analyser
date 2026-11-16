@@ -1,5 +1,5 @@
 import os
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 
 from supabase import create_client
 from dotenv import load_dotenv
@@ -35,6 +35,17 @@ def insert_signal(signal: dict):
 def upsert_signal(signal: dict):
     # overwrite an existing signal for the market — used when re-scoring against a changed watchlist
     get_client().table("signals").upsert(signal, on_conflict="market_id").execute()
+
+
+def insert_snapshot(snap: dict):
+    get_client().table("snapshots").insert(snap).execute()
+
+
+def get_snapshots(days: int = 35) -> list[dict]:
+    """Saved scan snapshots, oldest first. Raises if the snapshots table hasn't been created (see schema.sql)."""
+    since = (datetime.now(timezone.utc) - timedelta(days=days)).isoformat()
+    return (get_client().table("snapshots").select("taken_at,sectors,markets")
+            .gte("taken_at", since).order("taken_at").execute().data)
 
 
 def insert_report(report: dict):

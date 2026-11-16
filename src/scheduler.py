@@ -1,9 +1,9 @@
 import sys
-from datetime import datetime
+from datetime import datetime, timezone
 
 from apscheduler.schedulers.blocking import BlockingScheduler
 
-from . import database, polymarket, reports
+from . import database, polymarket, reports, views
 from .filter import score_market
 
 
@@ -13,6 +13,21 @@ def ingest():
     n = database.insert_markets(markets)
     print(f"ingest: stored {n} markets")
     return n
+
+
+SNAPSHOT_EVERY_H = 6  # ~4 rows a day: plenty for weekly trends and day-over-day movers, tiny for a free database
+
+
+def snapshot():
+    """Save sector heat + market odds so the dashboard can show trends. Throttled; never breaks a scan."""
+    try:
+        recent = database.get_snapshots(days=1)
+        if recent and (datetime.now(timezone.utc) - views._ts(recent[-1]["taken_at"])).total_seconds() < SNAPSHOT_EVERY_H * 3600 - 600:
+            return
+        database.insert_snapshot(views.snapshot(views.to_rows(database.get_signals(min_score=5))))
+        print("snapshot: saved")
+    except Exception as e:  # most likely the table doesn't exist yet
+        print(f"snapshot: skipped ({str(e)[:80]}) — run the snapshots SQL in schema.sql to enable trends")
 
 
 def filter_new(limit: int = 300):
@@ -51,6 +66,7 @@ def rescore(limit: int = 300):
                 print(f"  skip {m['market_id']}: {e}")
         print(f"rescore: scored {scored}/{len(markets)} against current watchlist")
         reports.generate_report()
+        snapshot()
         return scored
     finally:
         try:
@@ -62,6 +78,7 @@ def rescore(limit: int = 300):
 def pipeline():
     ingest()
     filter_new(40)  # bounded so a 2-min tick finishes; backlog clears over successive ticks
+    snapshot()
 
 
 def main():
@@ -69,6 +86,7 @@ def main():
         ingest()
         filter_new(400)  # manual run: big catch-up
         reports.generate_report()
+        snapshot()
         return
     if "--rescore" in sys.argv:
         rescore()

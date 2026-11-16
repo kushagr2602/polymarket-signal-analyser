@@ -122,7 +122,8 @@ function chrome() {
   const d = S.data, f = $('#fresh');
   f.classList.toggle('busy', d.rescanning);
   f.classList.toggle('stale', !d.rescanning && d.asOf && Date.now() - new Date(d.asOf) > 6 * 3600e3);
-  $('span', f).textContent = d.rescanning ? 'rescanning…' : d.asOf ? `scanned ${ago(d.asOf)}` : 'no scans yet';
+  $('span', f).textContent = d.rescanning ? 'rescanning…' : d.asOf ? ago(d.asOf) : 'no scans yet';
+  f.title = d.asOf ? `Last prediction-market scan: ${new Date(d.asOf).toLocaleString()}` : 'No scans yet';
   const top = [...d.signals].filter(r => r.score >= 8).sort((a, b) => b.score - a.score || b.volume - a.volume).slice(0, 16);
   const items = top.map(r => `<a class="ti" href="#/signals?q=${enc(r.market.slice(0, 70))}"><b style="--c:${conv(r.score)}">${r.score}</b>` +
     `<u>${esc(r.tickers[0] || r.sector)}</u>${esc(r.market)}</a>`).join('');
@@ -221,16 +222,20 @@ function vOverview() {
   </section>
 
   <div class="sh"><h2>Hot topics</h2></div>
-  <p class="sub">Segments ranked by heat — how much conviction <em>and</em> money is stacked on them right now. Start at the top. This ranks the present, not the trend.</p>
+  <p class="sub">Segments ranked by heat — how much conviction <em>and</em> money is stacked on them right now. Start at the top. The arrow shows how a segment's heat changed against about a week ago.</p>
   <div class="lb">${hot.map((h, i) => `
     <a class="lb-row" href="${sigLink({ sector: h.sector })}">
       <span class="lb-rank">${String(i + 1).padStart(2, '0')}</span>
-      <span><span class="lb-name">${esc(h.sector)}</span><span class="lb-lead">${esc(h.lead)}</span></span>
+      <span><span class="lb-name">${esc(h.sector)}</span>${trendChip(d.trends && d.trends.sectors[h.sector])}<span class="lb-lead">${esc(h.lead)}</span></span>
       <span class="lb-bar" style="--c:${conv(5 + h.heat / 20)}"><span class="track"><i class="fill" data-w="${h.heat}"></i></span><b>${h.heat}</b></span>
       <span class="lb-stat"><b>${plural(h.n, 'signal')}</b> · ${money(h.volume)}<br>peak ${h.peak}/10${h.soon != null && h.soon <= 14
         ? ` · <span class="soon">closes in ${h.soon}d</span>` : ` · ${esc(h.tickers.slice(0, 3).join(' ') || 'macro')}`}</span>
       <span class="go">→</span>
     </a>`).join('') || '<div class="empty">Nothing ranked yet.</div>'}</div>
+
+  <div class="sh"><h2>Odds that moved</h2></div>
+  <p class="sub">Markets whose yes-probability changed most since about a day ago: where the crowd changed its mind. A big move on a high-conviction market is the thing to read first.</p>
+  ${moversHTML(d.trends)}
 
   <div class="sh"><h2>Where the money is</h2></div>
   <p class="sub">Every active signal as a tile, grouped by the stock it affects. Bigger = more money traded (square-root scaled so one giant market doesn’t hide the rest); greener = higher conviction.</p>
@@ -265,6 +270,26 @@ function vOverview() {
   draw();
   S.ro = new ResizeObserver(() => { clearTimeout(S.rt); S.rt = setTimeout(draw, 120); });
   S.ro.observe($('#tm'));
+}
+
+function spark(pts) {
+  if (!pts || pts.length < 3) return '';
+  const lo = Math.min(...pts), hi = Math.max(...pts), W = 64, H = 18, X = i => i / (pts.length - 1) * W, Y = v => H - 2 - (hi - lo ? (v - lo) / (hi - lo) : .5) * (H - 4);
+  return `<svg class="spark" width="${W}" height="${H}" viewBox="0 0 ${W} ${H}" aria-hidden="true"><polyline points="${pts.map((v, i) => `${X(i).toFixed(1)},${Y(v).toFixed(1)}`).join(' ')}" fill="none" stroke="currentColor" stroke-width="1.5"/></svg>`;
+}
+function trendChip(tr) {
+  if (!tr || tr.change == null) return '';
+  const up = tr.change >= 0, flat = Math.abs(tr.change) < .03;
+  return `<span class="trend ${flat ? '' : up ? 'up' : 'down'}" data-tip="Heat now vs ${tr.vs_days} day${tr.vs_days === 1 ? '' : 's'} ago">${flat ? '→' : up ? '▲' : '▼'} ${pc(Math.abs(tr.change), false)} ${spark(tr.spark)}</span>`;
+}
+function moversHTML(t) {
+  if (!t) return '<div class="empty">Trends need one table in your database: run the <code>snapshots</code> SQL at the bottom of <code>schema.sql</code> in Supabase once. The scanner fills it from then on.</div>';
+  if (!t.since) return `<div class="empty">Not enough history yet. The scanner saves a snapshot about every 6 hours${t.snapshots ? ` (${plural(t.snapshots, 'so far')})` : ''}; movers appear once one is a day old.</div>`;
+  if (!t.movers.length) return `<div class="empty">Nothing moved more than 3 points since ${fmtDate(t.since.slice(0, 10), true)}. Calm day.</div>`;
+  return `<div class="tl">${t.movers.map(m => `<a class="mv" href="${sigLink({ q: m.market.slice(0, 70) })}">
+    <span class="mv-d ${m.delta > 0 ? 'up' : 'down'}">${m.delta > 0 ? '+' : '−'}${Math.round(Math.abs(m.delta) * 100)} pts</span>
+    <span class="mv-q">${esc(m.market)}<small>${esc(m.tickers.join(' · '))}</small></span>
+    <span class="mv-p">${Math.round(m.from * 100)}% → <b>${Math.round(m.to * 100)}%</b></span>${scPill(m.score)}</a>`).join('')}</div>`;
 }
 
 function catalysts(active) {
