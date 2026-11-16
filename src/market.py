@@ -18,7 +18,8 @@ ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 UNIVERSE = json.load(open(os.path.join(ROOT, "universe.json")))["items"]
 CACHE = os.path.join(ROOT, "data", "market.json")
 TTL = 6 * 3600  # end-of-day data; refreshing more often buys nothing
-FX = {"USD": "EURUSD=X", "GBp": "EURGBP=X", "GBP": "EURGBP=X", "CHF": "EURCHF=X", "DKK": "EURDKK=X"}
+FX = {"USD": "EURUSD=X", "GBp": "EURGBP=X", "GBP": "EURGBP=X", "CHF": "EURCHF=X", "DKK": "EURDKK=X", "INR": "EURINR=X",
+      "SEK": "EURSEK=X", "NOK": "EURNOK=X", "CAD": "EURCAD=X", "JPY": "EURJPY=X", "HKD": "EURHKD=X", "AUD": "EURAUD=X"}
 _lock = threading.Lock()
 
 
@@ -38,6 +39,18 @@ def to_eur(series: list, ccy: str, fx: list | None) -> list:
         if i >= 0 and fv[i]:
             out.append([d, p / pence / fv[i]])
     return out
+
+
+def eur_at(fx: dict, ccy: str, day: str, amount: float) -> float | None:
+    """amount in `ccy` on `day` → EUR, using the last known rate on or before that day. None if no rate."""
+    if ccy == "EUR":
+        return amount
+    s = fx.get(FX.get(ccy, ""))
+    if not s:
+        return None
+    i = bisect.bisect_right([d for d, _ in s], day) - 1
+    i = i if i >= 0 else 0  # trade older than our FX history: use the earliest rate we have
+    return amount / (100 if ccy == "GBp" else 1) / s[i][1] if s[i][1] else None
 
 
 def fetch() -> dict:
@@ -60,7 +73,7 @@ def load(force: bool = False) -> dict:
         if os.path.exists(CACHE):
             with open(CACHE) as f:
                 cached = json.load(f)
-            if not force and time.time() - cached["fetched"] < TTL and "fx" in cached:
+            if not force and time.time() - cached["fetched"] < TTL and set(FX.values()) <= set(cached.get("fx", {})):
                 return cached
         try:
             data = fetch()

@@ -661,6 +661,7 @@ function priceChart(series, range) {
 /* ---------- portfolio (local only) ---------- */
 const euro = (n, signed) => n == null ? '—' : (signed && n > 0 ? '+' : n < 0 ? '−' : '') + '€' + Math.abs(n).toLocaleString('en-US', { maximumFractionDigits: Math.abs(n) >= 1000 ? 0 : 2, minimumFractionDigits: Math.abs(n) >= 1000 ? 0 : 2 });
 const today = () => new Date().toISOString().slice(0, 10);
+const ccyFmt = (c, n) => (!c || c === 'EUR') ? '€' + fmtPrice(n) : `${c === 'GBp' ? 'GBp' : c} ${fmtPrice(n)}`;
 
 async function vPortfolio() {
   view.innerHTML = `<div class="page-h fade"><div class="eyebrow">Portfolio</div><h1>Your portfolio, explained</h1>
@@ -682,16 +683,17 @@ function tradeForm() {
     <label>Ticker<input class="in" name="ticker" list="tk-list" placeholder="VWCE.DE" required autocomplete="off"><datalist id="tk-list">${opts}</datalist></label>
     <label>Buy / sell<select class="in" name="side"><option value="buy">Buy</option><option value="sell">Sell</option></select></label>
     <label>Quantity<input class="in" name="qty" inputmode="decimal" placeholder="10" required></label>
-    <label>Price per unit (€)<input class="in" name="price" inputmode="decimal" placeholder="118.40" required></label>
-    <label>Fees (€)<input class="in" name="fees" inputmode="decimal" placeholder="1.00"></label>
+    <label>Price per unit<input class="in" name="price" inputmode="decimal" placeholder="118.40" required></label>
+    <label>Currency<select class="in" name="ccy">${['EUR', 'USD', 'INR', 'GBP', 'CHF', 'DKK', 'SEK', 'NOK', 'CAD', 'JPY', 'HKD', 'AUD'].map(c => `<option>${c}</option>`).join('')}</select></label>
+    <label>Fees<input class="in" name="fees" inputmode="decimal" placeholder="1.00"></label>
     <button class="btn primary" type="submit">Add trade</button></form>
-    <p class="hint">Use the exchange suffix for European listings: VWCE.DE (Xetra), ASML.AS (Amsterdam), MC.PA (Paris). US stocks need none: AAPL. Prices in euros, as your broker showed them.</p>`;
+    <p class="hint">Use the exchange suffix: VWCE.DE (Xetra), ASML.AS (Amsterdam), RELIANCE.NS (NSE India); US stocks need none (AAPL). Enter the price in the currency you paid. It's converted to euros at that day's exchange rate.</p>`;
 }
 
 function importBox() {
-  return `<div class="imp-box"><label class="btn"><input type="file" id="csvf" accept=".csv,text/csv" hidden>Import a CSV from your broker</label>
+  return `<div class="imp-box"><label class="btn"><input type="file" id="csvf" accept=".csv,text/csv" hidden>Import a broker export (CSV)</label>
     <a class="btn ghost" href="/api/trades/template.csv">Download the template</a></div>
-    <p class="hint">Needs columns for date, ticker, quantity and price (side and fees optional). English or German headers both work (Datum, Anzahl, Kurs…), and so do 14.03.2025 dates and 1.234,56 numbers. Importing the same file twice won’t double anything.</p><div id="imp-err"></div>`;
+    <p class="hint">Recognised automatically: <b>Revolut</b> account statement, <b>Interactive Brokers</b> activity statement or Flex query, <b>Zerodha</b> tradebook. Anything else needs date, ticker, quantity and price columns (English or German headers). Dividends, top-ups and fees are skipped, and importing the same file twice won’t double anything.</p><div id="imp-err"></div>`;
 }
 
 function pfPaint() {
@@ -731,8 +733,8 @@ function pfPaint() {
   <div class="sh"><h2>Your trades</h2><span class="more">${P.trades.length} recorded · fees ${euro(T.fees)}</span></div>
   <div class="grid2" style="margin-top:18px"><div class="card"><h3>Add a trade</h3>${tradeForm()}</div><div class="card"><h3>Import</h3>${importBox()}</div></div>
   <div class="tl">${P.trades.map(t => `<div class="tl-r"><span class="cat-d">${fmtDate(t.date, true)}</span><span class="tl-s ${t.side}">${t.side}</span>
-      <span><b>${esc(t.ticker)}</b> ${+t.qty.toFixed(4)} × €${fmtPrice(t.price)}${t.fees ? ` <small>+ €${t.fees.toFixed(2)} fees</small>` : ''}${t.note ? ` <small>· ${esc(t.note)}</small>` : ''}</span>
-      <span class="num">${euro(t.qty * t.price)}</span><button class="btn sm ghost" data-del="${esc(t.id)}" type="button" aria-label="Delete trade">Delete</button></div>`).join('')}</div>`;
+      <span><b>${esc(t.ticker)}</b> ${+t.qty.toFixed(4)} × ${ccyFmt(t.ccy, t.price)}${t.fees ? ` <small>+ ${ccyFmt(t.ccy, t.fees)} fees</small>` : ''} <small>· ${esc(t.broker || 'manual')}${t.note ? ' · ' + esc(t.note) : ''}</small></span>
+      <span class="num">${ccyFmt(t.ccy, t.qty * t.price)}</span><button class="btn sm ghost" data-del="${esc(t.id)}" type="button" aria-label="Delete trade">Delete</button></div>`).join('')}</div>`;
   pfWire();
 }
 
@@ -750,7 +752,7 @@ function pfWire() {
     try {
       const r = await api('/api/trades/import', { method: 'POST', body: { csv: await fl.text() } });
       S.pf = r.portfolio; pfPaint();
-      toast(`Imported ${plural(r.added, 'trade')}${r.skipped ? `, skipped ${r.skipped} already there` : ''}.`, !r.added && r.errors.length > 0);
+      toast(`${r.format ? `Read as ${r.format}: ` : ''}imported ${plural(r.added, 'trade')}${r.skipped ? `, ${r.skipped} already there` : ''}${r.nontrades ? `, ${r.nontrades} non-trade rows skipped` : ''}.`, !r.added && r.errors.length > 0);
       if (r.errors.length && $('#imp-err')) $('#imp-err').innerHTML = `<div class="note warn"><span>!</span><p>${r.errors.map(esc).join('<br>')}</p></div>`;
     } catch (err) { toast(err.message, true); }
   };

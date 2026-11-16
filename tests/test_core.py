@@ -202,6 +202,40 @@ def test_agent_never_runs_the_portfolio_tool_for_remote_requests():
         llm._ok.clear()
 
 
+def test_broker_imports_and_currency():
+    from src import portfolio as pf
+    revolut = ("Date,Ticker,Type,Quantity,Price per share,Total Amount,Currency,FX Rate\n"
+               "2025-01-06T14:32:10.123Z,,CASH TOP-UP,,,USD 500,USD,1.04\n"
+               "2025-01-07T15:01:00.000Z,AAPL,BUY - MARKET,2,USD 150.1,USD 300.21,USD,1.04\n"
+               "2025-02-10T10:00:00.000Z,AAPL,DIVIDEND,,,USD 0.48,USD,1.05\n"
+               "2025-03-03T16:20:00.000Z,AAPL,SELL - MARKET,1,USD 170,USD 170,USD,1.06\n")
+    t, e, fmt, skipped = pf.parse_import(revolut)
+    assert fmt == "Revolut statement" and not e and skipped == 2, (fmt, e, skipped)
+    assert [x["side"] for x in t] == ["buy", "sell"] and t[0]["ccy"] == "USD" and abs(t[0]["price"] - 150.105) < 1e-9  # from the total
+    ibkr = ("Statement,Header,Field Name,Field Value\nStatement,Data,Title,Activity Statement\n"
+            "Trades,Header,DataDiscriminator,Asset Category,Currency,Symbol,Date/Time,Quantity,T. Price,C. Price,Proceeds,Comm/Fee,Basis,Realized P/L,MTM P/L,Code\n"
+            'Trades,Data,Order,Stocks,EUR,VWCE,"2025-02-03, 09:12:01",10,120.5,121,-1205,-1.25,1206.25,0,5,O\n'
+            'Trades,Data,Order,Stocks,USD,BRK B,"2025-02-04, 15:30:00",-2,480,481,960,-0.35,900,59.65,2,C\n'
+            "Trades,SubTotal,,Stocks,EUR,VWCE,,10,,,-1205,-1.25,,,,\n"
+            'Trades,Data,Order,Forex,USD,EUR.USD,"2025-02-04, 15:31:00",-960,1.03,,,0,,,,\n'
+            "Financial Instrument Information,Header,Asset Category,Symbol,Description,Conid,Security ID,Listing Exch,Multiplier,Type,Code\n"
+            "Financial Instrument Information,Data,Stocks,VWCE,VANGUARD FTSE ALL-WORLD,1,IE00BK5BQT80,IBIS2,1,ETF,\n"
+            "Financial Instrument Information,Data,Stocks,BRK B,BERKSHIRE HATH-CL B,2,US0846707026,NYSE,1,COMMON,\n")
+    t, e, fmt, skipped = pf.parse_import(ibkr)
+    assert fmt.startswith("Interactive Brokers") and not e and skipped == 1, (fmt, e, skipped)  # the forex row
+    assert [(x["ticker"], x["side"], x["ccy"], x["fees"]) for x in t] == [("VWCE.DE", "buy", "EUR", 1.25), ("BRK-B", "sell", "USD", .35)], t
+    zerodha = ("symbol,isin,trade_date,exchange,segment,series,trade_type,auction,quantity,price,trade_id,order_id,order_execution_time\n"
+               "RELIANCE,INE002A01018,2025-04-10,NSE,EQ,EQ,buy,false,5,1210.5,1,1,2025-04-10T10:01:00\n"
+               "M&M,INE101A01026,2025-04-11,BSE,EQ,EQ,buy,false,1,3000,2,2,2025-04-11T10:01:00\n")
+    t, e, fmt, _ = pf.parse_import(zerodha)
+    assert fmt == "Zerodha tradebook" and not e and [x["ticker"] for x in t] == ["RELIANCE.NS", "M&M.BO"] and t[0]["ccy"] == "INR", (t, e)
+    # cost basis in EUR at the trade date's rate; a currency with no rate is reported, not guessed
+    conv, missing = pf.to_eur([{**t[0], "ccy": "USD", "price": 125.0, "fees": 1.25}], {"EURUSD=X": [["2025-01-01", 1.25]]})
+    assert abs(conv[0]["price"] - 100) < 1e-9 and abs(conv[0]["fees"] - 1) < 1e-9 and not missing
+    _, missing = pf.to_eur([{**t[0], "ccy": "INR"}], {})
+    assert missing == {"INR"}
+
+
 if __name__ == "__main__":
     tests =[v for k, v in sorted(globals().items()) if k.startswith("test_")]
     for t in tests:

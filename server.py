@@ -266,6 +266,7 @@ class Trade(BaseModel):
     price: str | float
     fees: str | float = 0
     note: str = ""
+    ccy: str = "EUR"
 
 
 @app.post("/api/trades")
@@ -300,7 +301,7 @@ def import_trades(body: CsvImport, request: Request):
     if len(body.csv) > 2_000_000:
         raise HTTPException(413, "That file is too large.")
     from src import portfolio
-    rows, errs = portfolio.parse_csv(body.csv)
+    rows, errs, fmt, nontrades = portfolio.parse_import(body.csv)
     have = portfolio.load()
     key = lambda t: (t["date"], t["ticker"], t["side"], round(t["qty"], 8), round(t["price"], 6))
     seen = {key(t) for t in have}
@@ -310,14 +311,15 @@ def import_trades(body: CsvImport, request: Request):
             portfolio.save(have + new)
         except ValueError as e:
             raise HTTPException(400, str(e))
-    return {"added": len(new), "skipped": len(rows) - len(new), "errors": errs[:20], "portfolio": _portfolio()}
+    return {"added": len(new), "skipped": len(rows) - len(new), "nontrades": nontrades, "format": fmt,
+            "errors": errs[:20], "portfolio": _portfolio()}
 
 
 @app.get("/api/trades/template.csv")
 def trades_template():
     from fastapi.responses import PlainTextResponse
-    return PlainTextResponse("date,ticker,side,qty,price,fees,note\n2025-01-15,VWCE.DE,buy,10,118.40,1.00,monthly plan\n"
-                             "2025-03-03,ASML.AS,buy,2,640.00,1.00,\n", media_type="text/csv",
+    return PlainTextResponse("date,ticker,side,qty,price,fees,currency,note\n2025-01-15,VWCE.DE,buy,10,118.40,1.00,EUR,monthly plan\n"
+                             "2025-03-03,NVDA,buy,2,131.20,0,USD,\n2025-04-10,RELIANCE.NS,buy,5,1210.50,0,INR,\n", media_type="text/csv",
                              headers={"Content-Disposition": "attachment; filename=trades-template.csv"})
 
 

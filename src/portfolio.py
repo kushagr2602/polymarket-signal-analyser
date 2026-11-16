@@ -15,7 +15,7 @@ from datetime import date
 from . import market
 
 PATH = os.path.join(market.ROOT, "data", "trades.json")
-TICKER = re.compile(r"[A-Z0-9][A-Z0-9.\-]{0,14}")
+TICKER = re.compile(r"[A-Z0-9][A-Z0-9.&\-]{0,19}")  # & for NSE names like M&M.NS
 SIDES = {"buy": "buy", "b": "buy", "kauf": "buy", "purchase": "buy", "sell": "sell", "s": "sell", "verkauf": "sell", "sale": "sell"}
 ALIASES = {  # CSV header → field (lower-cased match); covers common English/German broker exports
     "date": ("date", "datum", "trade date", "datetime", "time"),
@@ -25,6 +25,7 @@ ALIASES = {  # CSV header → field (lower-cased match); covers common English/G
     "price": ("price", "kurs", "preis", "unit price", "price per share"),
     "fees": ("fees", "fee", "commission", "gebühr", "gebuehr", "kosten", "costs"),
     "note": ("note", "notes", "comment"),
+    "ccy": ("currency", "ccy", "währung", "waehrung"),
 }
 
 
@@ -43,7 +44,11 @@ def num(x) -> float:
 def pdate(x) -> date:
     s = str(x).strip()[:10]
     m = re.fullmatch(r"(\d{1,2})[./](\d{1,2})[./](\d{4})", s)  # European day-first: 14.03.2025
-    return date(int(m[3]), int(m[2]), int(m[1])) if m else date.fromisoformat(s)
+    if m:
+        return date(int(m[3]), int(m[2]), int(m[1]))
+    if re.fullmatch(r"\d{8}", s[:8]) and not s[8:9].isdigit():  # IBKR Flex: 20250314
+        return date(int(s[:4]), int(s[4:6]), int(s[6:8]))
+    return date.fromisoformat(s)
 
 
 def clean(t: dict) -> dict:
@@ -66,8 +71,13 @@ def clean(t: dict) -> dict:
         raise ValueError("Quantity, price and fees must be numbers.")
     if qty <= 0 or price <= 0 or fees < 0:
         raise ValueError("Quantity and price must be above 0, and fees can't be negative.")
+    ccy = str(t.get("ccy") or "EUR").strip()
+    ccy = "GBp" if ccy in ("GBp", "GBX") else ccy.upper()
+    if ccy not in market.FX and ccy != "EUR":
+        raise ValueError(f"Currency {ccy} isn't supported yet (supported: EUR, {', '.join(sorted(set(market.FX) - {'GBp'}))}).")
     return {"id": t.get("id") or uuid.uuid4().hex[:10], "date": d.isoformat(), "ticker": tk, "side": side,
-            "qty": qty, "price": price, "fees": fees, "note": str(t.get("note") or "")[:80]}
+            "qty": qty, "price": price, "fees": fees, "ccy": ccy, "broker": str(t.get("broker") or "manual")[:12],
+            "note": str(t.get("note") or "")[:80]}
 
 
 def parse_csv(text: str) -> tuple[list[dict], list[str]]:
@@ -96,6 +106,137 @@ def parse_csv(text: str) -> tuple[list[dict], list[str]]:
         except (ValueError, TypeError) as e:
             errs.append(f"Row {n}: {e}")
     return out, errs
+
+
+# ---------------------------------------------------------------- broker exports
+# Formats from public import guides, not official specs — so every parser reads the file's own header row and
+# reports what it skipped. Unknown layouts fall back to the generic date/ticker/qty/price importer.
+
+IB_EXCH = {"IBIS": ".DE", "IBIS2": ".DE", "XETRA": ".DE", "FWB": ".F", "FWB2": ".F", "AEB": ".AS", "SBF": ".PA", "ENEXT.BE": ".BR",
+           "LSE": ".L", "LSEETF": ".L", "EBS": ".SW", "SWX": ".SW", "BVME": ".MI", "BVME.ETF": ".MI", "BM": ".MC", "SFB": ".ST",
+           "CPH": ".CO", "OSE": ".OL", "NSE": ".NS", "TSE": ".TO", "SEHK": ".HK", "ASX": ".AX"}
+
+
+def _money(x) -> float:
+    """'USD 1,234.56' / '€12,50' / '-3.2' → float."""
+    return num(re.sub(r"[^\d,.\-]", "", str(x)) or "0")
+
+
+def _rows(text: str) -> list[dict]:
+    try:
+        dialect = csv.Sniffer().sniff(text[:2000], delimiters=",;\t")
+    except csv.Error:
+        dialect = csv.excel
+    return list(csv.DictReader(io.StringIO(text.strip()), dialect=dialect))
+
+
+def _ib_ticker(sym: str, exch: str | None) -> str:
+    return sym.strip().replace(" ", "-") + IB_EXCH.get((exch or "").upper(), "")  # US venues need no suffix; "BRK B" → BRK-B
+
+
+def _collect(raw_rows, make) -> tuple[list[dict], list[str], int]:
+    out, errs, skipped = [], [], 0
+    for n, r in raw_rows:
+        try:
+            t = make(r)
+            if t is None:
+                skipped += 1  # dividends, top-ups, fees, FX conversions, subtotal rows — not trades
+                continue
+            out.append(clean(t))
+        except (ValueError, TypeError, KeyError) as e:
+            errs.append(f"Row {n}: {e}")
+    return out, errs, skipped
+
+
+def _revolut(rows):
+    def make(r):
+        typ = (r.get("Type") or "").upper()
+        side = "buy" if "BUY" in typ else "sell" if "SELL" in typ else None
+        if not side:
+            return None
+        qty, total = abs(num(r["Quantity"])), abs(_money(r.get("Total Amount") or 0))
+        price = total / qty if total and qty else _money(r["Price per share"])  # the shown price can be rounded
+        return {"date": r["Date"], "ticker": r["Ticker"], "side": side, "qty": qty, "price": price,
+                "ccy": r.get("Currency") or "USD", "broker": "revolut"}
+    return _collect(enumerate(rows, start=2), make)
+
+
+def _zerodha(rows):
+    def make(r):
+        sym = r.get("symbol") or r.get("tradingsymbol")
+        if (r.get("segment") or "EQ").upper() not in ("EQ", ""):
+            return None  # futures/options aren't holdings
+        exch = (r.get("exchange") or "NSE").upper()
+        return {"date": r["trade_date"], "ticker": f"{sym}.{'BO' if exch == 'BSE' else 'NS'}", "side": r["trade_type"],
+                "qty": r["quantity"], "price": r["price"], "ccy": "INR", "broker": "zerodha"}
+    return _collect(enumerate(rows, start=2), make)
+
+
+def _ibkr_flex(rows):
+    def make(r):
+        if (r.get("AssetClass") or "STK").upper() not in ("STK", "ETF", ""):
+            return None
+        q = num(r["Quantity"])
+        side = (r.get("Buy/Sell") or ("SELL" if q < 0 else "BUY")).lower()
+        return {"date": r.get("TradeDate") or r.get("DateTime"), "ticker": _ib_ticker(r["Symbol"], r.get("ListingExchange")),
+                "side": side, "qty": abs(q), "price": r["TradePrice"], "fees": abs(num(r.get("IBCommission") or 0)),
+                "ccy": r.get("CurrencyPrimary") or r.get("Currency") or "USD", "broker": "ibkr"}
+    return _collect(enumerate(rows, start=2), make)
+
+
+def _ibkr_statement(text):
+    """Activity Statement: many sections in one file; column 2 says Header or Data."""
+    hdr, sec = {}, {}
+    for row in csv.reader(io.StringIO(text)):
+        if len(row) > 2 and row[1] == "Header":
+            hdr[row[0]] = row[2:]
+        elif len(row) > 2 and row[1] == "Data" and row[0] in hdr:
+            sec.setdefault(row[0], []).append(dict(zip(hdr[row[0]], row[2:])))
+    exch = {r.get("Symbol"): r.get("Listing Exch") for r in sec.get("Financial Instrument Information", [])}
+
+    def make(r):
+        if r.get("DataDiscriminator", "Order") not in ("Order", "Trade") or r.get("Asset Category", "Stocks") != "Stocks":
+            return None  # SubTotal/Total rows, forex conversions, options
+        q = num(r["Quantity"])
+        return {"date": r["Date/Time"], "ticker": _ib_ticker(r["Symbol"], exch.get(r["Symbol"])), "side": "sell" if q < 0 else "buy",
+                "qty": abs(q), "price": r["T. Price"], "fees": abs(num(r.get("Comm/Fee") or 0)), "ccy": r.get("Currency") or "USD",
+                "broker": "ibkr"}
+    return _collect(enumerate(sec.get("Trades", []), start=1), make)
+
+
+def parse_import(text: str) -> tuple[list[dict], list[str], str, int]:
+    """Any supported export → (trades, errors, format name, rows skipped as non-trades)."""
+    if re.search(r"^Trades,Header,", text, re.M):
+        t, e, k = _ibkr_statement(text)
+        return t, e, "Interactive Brokers activity statement", k
+    rows = _rows(text)
+    if not rows:
+        return [], ["The file is empty."], "", 0
+    h = {k.strip().lower() for k in rows[0] if k}
+    if {"ticker", "type", "quantity", "price per share"} <= h:
+        t, e, k = _revolut([{kk.strip(): v for kk, v in r.items() if kk} for r in rows])
+        return t, e, "Revolut statement", k
+    if "trade_type" in h and h & {"symbol", "tradingsymbol"}:
+        t, e, k = _zerodha([{kk.strip().lower(): v for kk, v in r.items() if kk} for r in rows])
+        return t, e, "Zerodha tradebook", k
+    if {"symbol", "tradeprice"} <= h:
+        t, e, k = _ibkr_flex([{kk.strip(): v for kk, v in r.items() if kk} for r in rows])
+        return t, e, "Interactive Brokers Flex query", k
+    t, e = parse_csv(text)
+    return t, e, "CSV", 0
+
+
+def to_eur(trades: list[dict], fx: dict) -> tuple[list[dict], set[str]]:
+    """Trade prices/fees → EUR at each trade's own date. Returns (converted, currencies we had no rate for)."""
+    out, missing = [], set()
+    for t in trades:
+        ccy = t.get("ccy", "EUR")
+        p, f = market.eur_at(fx, ccy, t["date"], t["price"]), market.eur_at(fx, ccy, t["date"], t["fees"])
+        if p is None:
+            missing.add(ccy)
+            continue
+        out.append({**t, "price": p, "fees": f or 0})
+    return out, missing
 
 
 def positions(trades: list[dict]) -> dict[str, dict]:
@@ -175,7 +316,8 @@ def notes(hold: list[dict], mix: dict | None) -> list[dict]:
 
 def analyse(trades: list[dict], data: dict, rows: list[dict]) -> dict:
     meta = {r["t"]: r for r in rows}
-    pos = positions(trades)
+    eur_trades, no_fx = to_eur(trades, data.get("fx", {}))
+    pos = positions(eur_trades)
     held = {t: p for t, p in pos.items() if p["qty"] > 1e-9}
     closes = dict(data["closes"])
     missing = [t for t in held if not closes.get(t)]
@@ -212,7 +354,8 @@ def analyse(trades: list[dict], data: dict, rows: list[dict]) -> dict:
                    "n": len(hold), "day": sum(h["value"] * h["r1d"] / (1 + h["r1d"]) for h in hold if h["value"] and h["r1d"] is not None)},
         "mix": mix and {k: mix[k] for k in ("growth", "cagr3", "r1y", "vol", "mdd", "rpr", "short", "years")},
         "mix_cards": [c for c in market.explain(mix, "EUR", "mix") if c["key"] not in ("fee", "fx")] if mix else [],
-        "notes": notes(hold, mix),
+        "notes": notes(hold, mix) + [{"kind": "warn", "text": f"Trades in {c} were left out: no {c}→EUR exchange rate available yet."}
+                                     for c in sorted(no_fx)],
     }
 
 
@@ -223,7 +366,7 @@ def load() -> list[dict]:
 
 
 def save(trades: list[dict]) -> None:
-    positions(trades)  # refuse to store an impossible history (selling more than you held)
+    positions(trades)  # refuse to store an impossible history (selling more than you held); quantities don't depend on currency
     os.makedirs(os.path.dirname(PATH), exist_ok=True)
     tmp = PATH + ".tmp"
     with open(tmp, "w") as f:
