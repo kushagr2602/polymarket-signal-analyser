@@ -1128,10 +1128,11 @@ function paintDrawer() {
       <form class="row" id="indf"><input class="in" id="ind" placeholder="e.g. semiconductors, biotech, defense" autocomplete="off" maxlength="60"><button class="btn" type="submit"${W.finding ? ' disabled' : ''}>${W.finding ? 'Finding…' : 'Find'}</button></form>
       ${sugg.length ? `<div class="tags" style="margin-top:12px">${sugg.map(([t, dsc]) => `<button class="tag add" data-add="${esc(t)}" type="button">+ ${esc(t)}<small>${esc(dsc)}</small></button>`).join('')}</div>` : '<div class="hint">We’ll suggest liquid US-listed tickers central to the theme.</div>'}</div>
     <div class="dsec"><h3><span>Focus sectors</span><span>one per line</span></h3><textarea class="in" id="sects" rows="6">${esc(W.sectors.join('\n'))}</textarea></div>
-    <div class="dsec"><button class="btn primary lg" id="save" type="button" style="width:100%"${W.busy ? ' disabled' : ''}>Save watchlist</button></div>
+    ${S.data.local ? `<div class="dsec"><button class="btn primary lg" id="save" type="button" style="width:100%"${W.busy ? ' disabled' : ''}>Save watchlist</button></div>`
+      : '<div class="dsec"><div class="note info"><span>i</span><p>Editing the watchlist and rescanning work when the app runs on your own computer. Here the data refreshes every hour by itself.</p></div></div>'}
     <div class="dsec"><h3><span>Data</span></h3><div class="d-actions">
       ${scanning ? `<div class="scanning">${orbHTML(30)}<span>Rescanning markets… give it a few minutes.</span></div>` : ''}
-      <button class="btn" id="rescan" type="button"${scanning ? ' disabled' : ''}>↻ Rescan markets</button>
+      ${S.data.local ? `<button class="btn" id="rescan" type="button"${scanning ? ' disabled' : ''}>↻ Rescan markets</button>` : ''}
       <button class="btn" id="reload" type="button">⟳ Reload data</button></div>
       <div class="hint">Rescan re-scores the top ~300 markets against the current list (about 5 minutes, runs in the background).</div></div>`;
   mountOrbs(drawer);

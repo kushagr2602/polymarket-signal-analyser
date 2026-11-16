@@ -17,6 +17,10 @@ jobs:
         with:
           python-version: "3.11"
       - run: pip install -r requirements.txt
+      - run: python -m src.market --refresh-storage   # 5y prices → Supabase Storage, read by the hosted app
+        env:
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_KEY: ${{ secrets.SUPABASE_KEY }}
       - run: python -m src.scheduler --once
         env:
           SUPABASE_URL: ${{ secrets.SUPABASE_URL }}

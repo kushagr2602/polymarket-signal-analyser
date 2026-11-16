@@ -16,7 +16,13 @@ from datetime import date, timedelta
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 UNIVERSE = json.load(open(os.path.join(ROOT, "universe.json")))["items"]
-CACHE = os.path.join(ROOT, "data", "market.json")
+# Serverless hosts (Vercel sets VERCEL=1) may not offer a writable project folder: keep caches in /tmp there.
+DATA = os.getenv("DATA_DIR") or ("/tmp/fs-data" if os.getenv("VERCEL") else os.path.join(ROOT, "data"))
+CACHE = os.path.join(DATA, "market.json")
+# PRICE_CACHE=supabase: read the 5-year price file the hourly job uploads to Supabase Storage, instead of
+# downloading it from Yahoo on every cold start (slow, and cloud IPs get rate-limited).
+REMOTE = os.getenv("PRICE_CACHE") == "supabase"
+BUCKET, OBJECT = "cache", "market.json.gz"
 TTL = 6 * 3600  # end-of-day data; refreshing more often buys nothing
 FX = {"USD": "EURUSD=X", "GBp": "EURGBP=X", "GBP": "EURGBP=X", "CHF": "EURCHF=X", "DKK": "EURDKK=X", "INR": "EURINR=X",
       "SEK": "EURSEK=X", "NOK": "EURNOK=X", "CAD": "EURCAD=X", "JPY": "EURJPY=X", "HKD": "EURHKD=X", "AUD": "EURAUD=X"}
@@ -66,36 +72,76 @@ def fetch() -> dict:
     return {"fetched": time.time(), "closes": closes, "fx": {p: raw.get(p, []) for p in fxs}}
 
 
-_mem: dict | None = None  # parsed copy of data/market.json: re-parsing 3.5 MB on every API call cost ~60-100 ms each
+_mem: dict | None = None  # parsed copy of the price data: re-parsing 3.5 MB on every API call cost ~60-100 ms each
+
+
+def _complete(c: dict | None) -> bool:
+    return bool(c) and set(FX.values()) <= set(c.get("fx", {})) and {i["t"] for i in UNIVERSE} <= set(c["closes"])
+
+
+def _fresh(c: dict | None) -> bool:
+    return _complete(c) and time.time() - c["fetched"] < TTL
+
+
+def _from_storage() -> dict | None:
+    import gzip
+    from . import database
+    try:
+        return json.loads(gzip.decompress(database.get_client().storage.from_(BUCKET).download(OBJECT)))
+    except Exception:
+        return None  # not uploaded yet, or Supabase unreachable — callers fall back to Yahoo
+
+
+def save_to_storage(data: dict) -> int:
+    """Upload the price data (gzipped, ~1 MB) for hosted instances to read. Creates the private bucket on first use."""
+    import gzip
+    from . import database
+    store = database.get_client().storage
+    if BUCKET not in {b.name for b in store.list_buckets()}:
+        store.create_bucket(BUCKET, options={"public": False})
+    blob = gzip.compress(json.dumps(data, separators=(",", ":")).encode())
+    store.from_(BUCKET).upload(OBJECT, blob, {"content-type": "application/gzip", "upsert": "true"})
+    return len(blob)
 
 
 def load(force: bool = False) -> dict:
-    """Cached closes; refetch when stale. If Yahoo is down, keep serving the last good copy."""
+    """Price data, freshest available: memory → Supabase Storage (hosted) → local file → Yahoo.
+    If every source is stale and Yahoo is down, the last good copy is served rather than an error."""
     global _mem
     with _lock:  # single-flight: two requests on a cold cache must not both download 5 years of prices
-        cached = _mem
-        if cached is None and os.path.exists(CACHE):
-            with open(CACHE) as f:
-                cached = _mem = json.load(f)
-        if cached and not force:
-            fresh = time.time() - cached["fetched"] < TTL
-            complete = set(FX.values()) <= set(cached.get("fx", {})) and {i["t"] for i in UNIVERSE} <= set(cached["closes"])
-            if fresh and complete:  # a universe.json edit must trigger a refetch, not silently miss tickers
-                return cached
+        if not force and _fresh(_mem):
+            return _mem
+        options = [_mem]
+        if REMOTE and not force:
+            options.append(_from_storage())
+        if _mem is None and os.path.exists(CACHE):
+            try:
+                with open(CACHE) as f:
+                    options.append(json.load(f))
+            except (OSError, ValueError):
+                pass
+        best = max((c for c in options if c), key=lambda c: c["fetched"], default=None)
+        if not force and _fresh(best):
+            _mem = best
+            return best
         try:
             data = fetch()
         except Exception:
-            if cached:
-                return cached
+            if best:
+                _mem = best
+                return best
             raise
-        os.makedirs(os.path.dirname(CACHE), exist_ok=True)
-        with open(CACHE, "w") as f:
-            json.dump(data, f)
         _mem = data
+        try:
+            os.makedirs(os.path.dirname(CACHE), exist_ok=True)
+            with open(CACHE, "w") as f:
+                json.dump(data, f)
+        except OSError:
+            pass  # read-only disk (serverless): memory is enough for this instance
         return data
 
 
-EXTRA = os.path.join(ROOT, "data", "extra.json")
+EXTRA = os.path.join(DATA, "extra.json")
 
 
 def extra(tickers: list[str], data: dict) -> dict:
@@ -128,8 +174,11 @@ def extra(tickers: list[str], data: dict) -> dict:
         with _lock:
             cache = json.load(open(EXTRA)) if os.path.exists(EXTRA) else {}
             cache.update(got)
-            os.makedirs(os.path.dirname(EXTRA), exist_ok=True)
-            json.dump(cache, open(EXTRA, "w"))
+            try:
+                os.makedirs(os.path.dirname(EXTRA), exist_ok=True)
+                json.dump(cache, open(EXTRA, "w"))
+            except OSError:
+                pass  # read-only disk: this request still gets its prices, they just aren't kept
     return {t: cache[t]["closes"] for t in tickers if t in cache}
 
 
@@ -498,3 +547,10 @@ def instrument(data: dict, ticker: str) -> dict | None:
         cards.append({"key": "also", "label": "Other listing", "value": "ETF class", "plain": r["also"], "tone": "neutral"})
     return {**r, "cards": cards, "series": data["closes"][ticker],
             "rank": sorted(peers, key=lambda x: -x["score"]).index(r) + 1, "of": len(peers)}
+
+
+if __name__ == "__main__":
+    import sys
+    if "--refresh-storage" in sys.argv:  # run by the hourly GitHub job
+        d = load(force=True)
+        print(f"prices: {sum(1 for v in d['closes'].values() if v)} series fetched; uploaded {save_to_storage(d) / 1e6:.2f} MB to Supabase Storage")

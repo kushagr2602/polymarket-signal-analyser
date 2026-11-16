@@ -71,6 +71,14 @@ python3 tests/eval_filter.py        # eval the filter against the labeled set
   `snapshots` SQL in schema.sql once).
 - Not investment advice: it ranks and explains; it never tells you to buy or sell, and it never places trades.
 
+## Hosting (Vercel)
+
+Import the repo on [vercel.com](https://vercel.com) — `server.py` is detected as the FastAPI entrypoint, `vercel.json` sets
+the function limits. Environment variables: `SUPABASE_URL`, `SUPABASE_KEY` (secret key, server-side only), `OPENAI_API_KEY`,
+`PRICE_CACHE=supabase`, optional `FINNHUB_API_KEY`. The hourly GitHub job (`.github/workflows/scan.yml`) scans Polymarket
+and uploads the 5-year price file to Supabase Storage, which the hosted app reads instead of calling Yahoo on every cold
+start. Portfolio, alerts, IPO watch list, watchlist editing and rescans stay on your own computer by design.
+
 ## The web app
 
 `server.py` is a thin FastAPI layer over the same modules the scanner uses; the UI in [web/](web/) is plain

@@ -83,13 +83,13 @@ def healthz():
 
 
 @app.get("/api/state")
-def state():
+def state(request: Request):
     sig, _, n_markets = cached("load", 600, _load)
     rows = views.to_rows(sig)
     wl = config.get_watchlist()
     last = max(((s.get("markets") or {}).get("fetched_at", "") for s in sig), default="")
     return {"asOf": last or None, "now": datetime.now(timezone.utc).isoformat(),
-            "rescanning": _rescanning(), "watchlist": wl, "models": {r: llm.active(r) for r in llm.ROLES},
+            "rescanning": _rescanning(), "watchlist": wl, "local": is_local(request), "models": {r: llm.active(r) for r in llm.ROLES},
             "kpis": views.kpis(rows, n_markets), "signals": rows,
             "exposure": views.exposure(rows, wl["tickers"]), "hot": views.hot_topics(rows), "trends": _trends(rows)}
 
@@ -161,6 +161,7 @@ class Watchlist(BaseModel):
 
 @app.post("/api/watchlist")
 def save_watchlist(body: Watchlist, request: Request):
+    local_only(request)  # personal config, and serverless hosts can't write files: edit it on your own computer
     limit(request, "watchlist", 15)
     tickers = {t.strip().upper(): d.strip()[:80] for t, d in body.tickers.items()}
     sectors = [s.strip()[:40] for s in body.sectors if s.strip()]
@@ -174,6 +175,7 @@ def save_watchlist(body: Watchlist, request: Request):
 
 @app.post("/api/rescan")
 def rescan(request: Request):
+    local_only(request)  # starts a long background process: only on your own computer (hosted data refreshes hourly)
     if _rescanning():
         raise HTTPException(409, "A rescan is already running.")
     limit(request, "rescan", 3)

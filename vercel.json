@@ -1,0 +1,8 @@
+{
+  "functions": {
+    "server.py": {
+      "maxDuration": 120,
+      "excludeFiles": "{data/**,tests/**,hooks/**,app.py,thumbnail.png,KAGGLE_WRITEUP.md,HOW_TO_READ.md,render.yaml}"
+    }
+  }
+}
