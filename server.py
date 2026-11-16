@@ -343,6 +343,69 @@ def import_trades(body: CsvImport, request: Request):
             "errors": errs[:20], "portfolio": _portfolio()}
 
 
+# ---------------------------------------------------------------- price alerts (local only)
+
+def _alerts():
+    from src import alerts, market
+    data = market.load()
+    al = alerts.load()
+    closes = dict(data["closes"])
+    missing = [a["ticker"] for a in al if not closes.get(a["ticker"])]
+    if missing:
+        closes.update(market.extra(missing, data))
+    return {"alerts": alerts.evaluate(al, closes, {i["t"]: i["name"] for i in market.UNIVERSE}), "kinds": alerts.KINDS}
+
+
+def _held() -> set[str]:
+    from src import portfolio
+    return {t for t, p in portfolio.positions(portfolio.load()).items() if p["qty"] > 1e-9}
+
+
+@app.get("/api/alerts")
+def get_alerts(request: Request):
+    local_only(request)
+    return _alerts()
+
+
+class AlertIn(BaseModel):
+    ticker: str
+    kind: str
+    value: str | float
+
+
+@app.post("/api/alerts")
+def add_alert(body: AlertIn, request: Request):
+    local_only(request)
+    from src import alerts, market
+    try:
+        a = alerts.clean(body.model_dump(), {i["t"] for i in market.UNIVERSE} | _held())
+    except ValueError as e:
+        raise HTTPException(400, str(e))
+    alerts.save(alerts.load() + [a])
+    return _alerts()
+
+
+@app.post("/api/alerts/holdings")
+def alerts_for_holdings(request: Request):
+    """One click: a 'falls 10% below its 1-year high' alert for every holding that doesn't have one yet."""
+    local_only(request)
+    from src import alerts, market
+    have = alerts.load()
+    covered = {a["ticker"] for a in have if a["kind"] == "drop"}
+    known = {i["t"] for i in market.UNIVERSE} | _held()
+    new = [alerts.clean({"ticker": t, "kind": "drop", "value": 10}, known) for t in sorted(_held() - covered)]
+    alerts.save(have + new)
+    return {**_alerts(), "added": len(new)}
+
+
+@app.delete("/api/alerts/{aid}")
+def delete_alert(aid: str, request: Request):
+    local_only(request)
+    from src import alerts
+    alerts.save([a for a in alerts.load() if a["id"] != aid])
+    return _alerts()
+
+
 @app.get("/api/trades/template.csv")
 def trades_template():
     from fastapi.responses import PlainTextResponse

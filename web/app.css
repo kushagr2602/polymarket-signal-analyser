@@ -526,3 +526,16 @@ a.hr:hover { background: var(--surface); }
 .scen .kpi:first-child { padding-left: 0; border-left: 0; }
 @media (max-width: 1020px) { .plan-form { grid-template-columns: 1fr 1fr; } .plan-form .btn { grid-column: 1 / -1; } }
 @media (max-width: 720px) { .plan-form { grid-template-columns: 1fr; } .scen { grid-template-columns: 1fr; } .scen .kpi { border-left: 0; padding-left: 0; } }
+
+/* ---------- alerts ---------- */
+.badge { display: inline-grid; place-items: center; min-width: 17px; height: 17px; padding: 0 5px; margin-left: 4px; border-radius: 9px;
+         background: var(--red); color: #fff; font: 600 10.5px var(--ff-m); vertical-align: 1px; }
+.badge[hidden] { display: none; }
+.al-form { grid-template-columns: 1.4fr 1.6fr 1fr auto; }
+.al-r { display: grid; grid-template-columns: 86px 1fr auto; gap: 14px; align-items: center; padding: 13px 6px; border-bottom: 1px solid var(--line2); font-size: 14px; }
+.al-r a { text-decoration: none; } .al-r a:hover b { color: var(--accent); }
+.al-r small { color: var(--muted); font-size: 13px; }
+.al-s { font: 600 10.5px var(--ff-m); letter-spacing: .1em; text-transform: uppercase; color: var(--muted); }
+.al-r.hit .al-s { color: var(--red); }
+@media (max-width: 1020px) { .al-form { grid-template-columns: 1fr 1fr; } }
+@media (max-width: 720px) { .al-form { grid-template-columns: 1fr; } .al-r { grid-template-columns: 1fr auto; } .al-s { grid-column: 1 / -1; } }

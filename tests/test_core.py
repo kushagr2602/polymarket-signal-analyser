@@ -273,6 +273,28 @@ def test_savings_plan_math():
     assert market.savings_plan([[d, 50.0] for d in days[:10]], 100, days[0]) is None  # too little history
 
 
+def test_price_alerts():
+    from datetime import date, timedelta
+    from src import alerts
+    days = [(date(2026, 1, 1) + timedelta(days=i)).isoformat() for i in range(120)]
+    px = [100 + i for i in range(60)] + [159 * .85] * 60          # climbs to 159, then drops 15% and stays
+    s = {"X": [[d, p] for d, p in zip(days, px)]}
+    mk = lambda kind, v, created="2026-01-01": alerts.clean({"ticker": "X", "kind": kind, "value": v, "created": created}, {"X"})
+    r = {a["kind"] + str(a["value"]): a for a in alerts.evaluate([mk("drop", 10), mk("drop", 20), mk("below", 140), mk("move", 10)], s, {"X": "Ex"})}
+    assert r["drop10.0"]["triggered"] and r["drop10.0"]["first"] == days[60], r["drop10.0"]
+    assert not r["drop20.0"]["triggered"] and r["drop20.0"]["first"] is None
+    assert r["below140.0"]["triggered"] and "below your €140.00 line" in r["below140.0"]["text"]
+    assert not r["move10.0"]["triggered"] and r["move10.0"]["first"] == days[60]  # the 15% one-day drop fired once, then calm
+    late = alerts.evaluate([mk("move", 10, created=days[90])], s, {})[0]
+    assert late["first"] is None  # a move before the alert existed doesn't count
+    for bad in ({"ticker": "NOPE", "kind": "drop", "value": 10}, {"ticker": "X", "kind": "drop", "value": 0}, {"ticker": "X", "kind": "?", "value": 5}):
+        try:
+            alerts.clean(bad, {"X"})
+            raise AssertionError(f"accepted {bad}")
+        except ValueError:
+            pass
+
+
 if __name__ == "__main__":
     tests =[v for k, v in sorted(globals().items()) if k.startswith("test_")]
     for t in tests:

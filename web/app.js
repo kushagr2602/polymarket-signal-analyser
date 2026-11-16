@@ -147,9 +147,9 @@ function pollRescan() {
 }
 
 /* ---------- router ---------- */
-const ROUTES = { screener: vScreener, i: vInstrument, portfolio: vPortfolio, compare: vCompare, plan: vPlan, overview: vOverview, signals: vSignals, news: vNews, ask: vAsk, brief: vBrief };
+const ROUTES = { screener: vScreener, i: vInstrument, portfolio: vPortfolio, compare: vCompare, plan: vPlan, alerts: vAlerts, overview: vOverview, signals: vSignals, news: vNews, ask: vAsk, brief: vBrief };
 const NEEDS_SIGNALS = new Set(['overview', 'signals', 'brief']);  // views that read the Polymarket database
-const TITLES = { screener: 'Screener', portfolio: 'Portfolio', compare: 'Compare', plan: 'Savings plan', overview: 'Predictions', signals: 'Signals', news: 'News', ask: 'Ask', brief: 'Brief' };
+const TITLES = { screener: 'Screener', portfolio: 'Portfolio', compare: 'Compare', plan: 'Savings plan', alerts: 'Alerts', overview: 'Predictions', signals: 'Signals', news: 'News', ask: 'Ask', brief: 'Brief' };
 function parseHash() {
   const [p0, qs = ''] = location.hash.replace(/^#\/?/, '').split('?');
   const [p, ...rest] = p0.split('/');
@@ -848,6 +848,69 @@ function planChart(tl) {
   hit.onmouseleave = rest;
 }
 
+/* ---------- price alerts (local only) ---------- */
+const AL_UNIT = { drop: '%', move: '%', below: '€', above: '€' };
+const AL_LABEL = { drop: 'Falls this far below its 1-year high', below: 'Price falls below', above: 'Price rises above', move: 'Moves this much in one day' };
+
+async function refreshAlerts(data) {
+  try { S.al = data || await api('/api/alerts'); } catch (e) { S.al = null; }
+  const n = S.al ? S.al.alerts.filter(a => a.triggered).length : 0, b = $('#al-badge');
+  if (b) { b.textContent = n; b.hidden = !n; }
+  if (!S.al || !('Notification' in window) || Notification.permission !== 'granted') return;
+  S.al.alerts.filter(a => a.triggered).forEach(a => {  // once per alert per trading day
+    const k = `notified:${a.id}:${a.asof}`;
+    try { if (localStorage.getItem(k)) return; localStorage.setItem(k, 1); } catch (e) { return; }
+    new Notification('My Financial Scanner', { body: a.text });
+  });
+}
+
+async function vAlerts() {
+  view.innerHTML = `<div class="page-h fade"><div class="eyebrow">Alerts</div><h1>Price alerts</h1>
+    <p>Get flagged when something you care about moves. Checked against end-of-day prices whenever this app is open; stored only on this computer.</p></div>
+    <div id="al"><div class="loading sm">${orbHTML(56, 'Checking prices…')}</div></div>`;
+  mountOrbs(view);
+  if (!S.screen) { try { S.screen = await api('/api/screen'); } catch (e) { /* datalist just stays empty */ } }
+  await refreshAlerts();
+  if (!$('#al')) return;
+  if (!S.al) { $('#al').innerHTML = `<div class="err-card"><h2>Alerts are private</h2><p>They only open when the app runs on your own computer.</p></div>`; return; }
+  alPaint();
+}
+
+function alPaint() {
+  const A = S.al.alerts, rows = S.screen ? S.screen.rows : [], perm = 'Notification' in window ? Notification.permission : 'unsupported';
+  $('#al').innerHTML = `
+  <div class="note info" style="margin-top:24px"><span>i</span><p>A 10–20% fall from a high is a normal pull-back for shares and happens most years. Use alerts to pay attention, not to panic-sell. The worst-fall numbers in the screener show how deep each one has dropped before.</p></div>
+  <div class="cta" style="margin-top:18px"><button class="btn" id="al-hold" type="button">Add a 10% drop alert for each holding</button>
+    ${perm === 'default' ? '<button class="btn ghost" id="al-perm" type="button">Notify me in this browser</button>' : perm === 'granted' ? '<span class="hint" style="align-self:center">Browser notifications are on.</span>' : ''}</div>
+  <div class="card" style="margin-top:22px"><h3>New alert</h3>
+    <form id="alf" class="tform al-form">
+      <label>Fund or stock<input class="in" name="ticker" list="al-list" placeholder="VWCE.DE" required autocomplete="off"><datalist id="al-list">${rows.map(r => `<option value="${esc(r.t)}">${esc(r.name)}</option>`).join('')}</datalist></label>
+      <label>When it…<select class="in" name="kind">${Object.entries(AL_LABEL).map(([k, l]) => `<option value="${k}">${l}</option>`).join('')}</select></label>
+      <label><span id="al-unit">Percent (%)</span><input class="in" name="value" inputmode="decimal" placeholder="10" required></label>
+      <button class="btn primary" type="submit">Add alert</button></form></div>
+  <div class="sh"><h2>Your alerts</h2><span class="more">${A.filter(a => a.triggered).length} fired · ${A.length} total</span></div>
+  ${A.length ? `<div class="tl">${A.map(a => `<div class="al-r ${a.triggered ? 'hit' : ''}"><span class="al-s">${a.triggered ? 'Fired' : 'Watching'}</span>
+      <span><a href="#/i/${enc(a.ticker)}"><b>${esc(a.ticker)}</b></a> · ${esc(AL_LABEL[a.kind].toLowerCase())} ${a.kind === 'below' || a.kind === 'above' ? '€' + a.value : a.value + '%'}<br><small>${esc(a.text)}</small></span>
+      <button class="btn sm ghost" data-del="${esc(a.id)}" type="button">Delete</button></div>`).join('')}</div>` : '<div class="empty">No alerts yet. Add one above, or one click for all your holdings.</div>'}`;
+  const f = $('#alf');
+  f.kind.onchange = () => { $('#al-unit').textContent = AL_UNIT[f.kind.value] === '%' ? 'Percent (%)' : 'Price in euros (€)'; };
+  f.onsubmit = async e => {
+    e.preventDefault();
+    const body = Object.fromEntries(new FormData(f)); body.ticker = body.ticker.trim().toUpperCase();
+    try { await refreshAlerts(await api('/api/alerts', { method: 'POST', body })); alPaint(); toast(`Alert added for ${body.ticker}.`); }
+    catch (err) { toast(err.message, true); }
+  };
+  $('#al-hold').onclick = async () => {
+    try { const r = await api('/api/alerts/holdings', { method: 'POST' }); await refreshAlerts(r); alPaint(); toast(r.added ? `Added ${plural(r.added, 'alert')}.` : 'Every holding already has a drop alert (or you have no holdings yet).'); }
+    catch (err) { toast(err.message, true); }
+  };
+  const pb = $('#al-perm'); if (pb) pb.onclick = async () => { await Notification.requestPermission(); await refreshAlerts(S.al); alPaint(); };
+  $$('[data-del]', $('#al')).forEach(b => b.onclick = async () => {
+    try { await refreshAlerts(await api('/api/alerts/' + enc(b.dataset.del), { method: 'DELETE' })); alPaint(); toast('Alert deleted.'); }
+    catch (err) { toast(err.message, true); }
+  });
+}
+
 /* ---------- portfolio (local only) ---------- */
 const euro = (n, signed) => n == null ? '—' : (signed && n > 0 ? '+' : n < 0 ? '−' : '') + '€' + Math.abs(n).toLocaleString('en-US', { maximumFractionDigits: Math.abs(n) >= 1000 ? 0 : 2, minimumFractionDigits: Math.abs(n) >= 1000 ? 0 : 2 });
 const today = () => new Date().toISOString().slice(0, 10);
@@ -1027,4 +1090,5 @@ addEventListener('keydown', e => {
   view.innerHTML = `<div class="loading">${orbHTML(72, 'Loading…')}</div>`; mountOrbs(view);
   try { await loadState(); pollRescan(); } catch (e) { S.stateErr = e.message; }  // signals optional; screener still runs
   route();
+  refreshAlerts();  // badge + browser notification for anything that fired (local only; silently skipped when hosted)
 })();
