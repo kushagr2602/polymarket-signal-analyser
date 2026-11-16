@@ -337,6 +337,7 @@ function drawTreemap(active) {
 function drawScatter(active) {
   const svg = $('#sc'); if (!svg || !active.length) return;
   const W = svg.clientWidth, H = svg.clientHeight, m = { l: 44, r: 16, t: 14, b: 34 };
+  if (W < 120 || H < 80) return;
   svg.setAttribute('viewBox', `0 0 ${W} ${H}`);
   const lv = active.map(r => Math.log10(Math.max(r.volume, 1))), lo = Math.floor(Math.min(...lv)), hi = Math.ceil(Math.max(...lv));
   const X = v => m.l + (Math.log10(Math.max(v, 1)) - lo) / (hi - lo || 1) * (W - m.l - m.r), Y = s => H - m.b - (s - 4.6) / 5.8 * (H - m.t - m.b);
@@ -507,6 +508,7 @@ const LEARN = [
   ['Growth per year', 'The average yearly increase, with dividends reinvested. +8% a year turns €1,000 into about €1,470 after 5 years. Three years or more says far more than any single year.'],
   ['Swing (volatility)', 'How much the price typically jumps around in a year. A world fund swings ~15%, bonds ~5%, a single tech stock 40%+. Bigger swings mean a bumpier ride, not necessarily a worse investment.'],
   ['Worst fall (drawdown)', 'The biggest drop from a high to the low that followed. −30% means €1,000 briefly became €700. The real question: would you have held on, or sold at the bottom?'],
+  ['Active fund vs index ETF', 'An index ETF copies a list of companies for a tiny fee (about 0.1–0.3% a year). An active fund, like BIT Capital’s, has a manager picking stocks for a bigger fee (often 1–2%). It’s only worth it if it beats the index by more than that, and each fund page shows whether it has.'],
   ['Return for the risk', 'Growth divided by swing: how much reward you got per unit of bumpiness. Above 1 is excellent, below 0.5 is a lot of stress for the reward. Professionals call a version of this the Sharpe ratio.'],
 ];
 
@@ -539,7 +541,7 @@ function scBar() {
   const s = S.sc, rows = S.screen.rows, mine = rows.filter(r => r.kind === s.kind), groups = {};
   mine.forEach(r => { groups[r.group] = (groups[r.group] || 0) + 1; });
   $('#sbar').innerHTML = `<div class="frow">
-      <div class="seg" id="kind" role="group" aria-label="Type">${[['etf', 'ETFs & ETCs'], ['stock', 'Stocks']].map(([k, l]) => `<button type="button" data-k="${k}" class="${s.kind === k ? 'on' : ''}">${l} <small>${rows.filter(r => r.kind === k).length}</small></button>`).join('')}</div>
+      <div class="seg" id="kind" role="group" aria-label="Type">${[['etf', 'ETFs & ETCs'], ['stock', 'Stocks'], ['fund', 'Active funds']].map(([k, l]) => `<button type="button" data-k="${k}" class="${s.kind === k ? 'on' : ''}">${l} <small>${rows.filter(r => r.kind === k).length}</small></button>`).join('')}</div>
       <label class="search"><svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6"><circle cx="7" cy="7" r="5"/><path d="m11 11 3.5 3.5"/></svg>
         <input class="in" id="q" type="search" placeholder="Search by name or ticker" value="${esc(s.q)}" autocomplete="off" aria-label="Search"><kbd>/</kbd></label>
       <select class="in" id="sort" aria-label="Sort by">${SC_SORTS.map(([k, l]) => `<option value="${k}"${s.sort === k ? ' selected' : ''}>Sort: ${l}</option>`).join('')}</select>
@@ -553,7 +555,7 @@ function scList() {
   const s = S.sc, q = s.q.trim().toLowerCase(), val = r => s.sort === 'score' ? r.score : r.m[s.sort];
   const rows = S.screen.rows.filter(r => r.kind === s.kind && (!s.group || r.group === s.group) && (!q || (r.name + ' ' + r.t).toLowerCase().includes(q)))
     .sort((a, b) => { const x = val(a), y = val(b); return x == null ? 1 : y == null ? -1 : (x - y) * s.dir || b.score - a.score; });
-  $('#count').textContent = `${rows.length} ${s.kind === 'etf' ? 'funds' : 'stocks'} · ${SC_SORTS.find(z => z[0] === s.sort)[1].toLowerCase()}`;
+  $('#count').textContent = `${rows.length} ${s.kind === 'stock' ? 'stocks' : s.kind === 'fund' ? 'active funds' : 'funds'} · ${SC_SORTS.find(z => z[0] === s.sort)[1].toLowerCase()}`;
   $('#asof').textContent = `Prices as of ${fmtDate(S.screen.asOf, true)} · Yahoo Finance`;
   const h = (l, tip, cls = '') => `<span class="num ${cls}" data-tip="${esc(tip)}">${l}</span>`;
   $('#res').innerHTML = `<div class="sr sr-h"><span>#</span><span>Name</span><span data-tip="0–100: how it compares with the others of its type in this list. Hover a row's numbers for what they mean.">Score</span>
@@ -578,7 +580,8 @@ async function vInstrument(q, t) {
     catch (e) { view.innerHTML = `<div class="err-card fade"><h2>Couldn’t load ${esc(t)}</h2><p>${esc(e.message)}</p><a class="btn primary" href="#/screener">Back to the screener</a></div>`; return; }
   }
   if (parseHash().arg !== t) return;
-  const m = r.m, kindL = r.kind === 'stock' ? 'Stock' : r.group === 'Gold' ? 'ETC' : 'ETF', noun = r.kind === 'etf' ? 'funds' : 'stocks';
+  const m = r.m, kindL = r.kind === 'stock' ? 'Stock' : r.kind === 'fund' ? 'Active fund' : r.group === 'Gold' ? 'ETC' : 'ETF',
+    noun = r.kind === 'stock' ? 'stocks' : r.kind === 'fund' ? 'active funds' : 'funds';
   const parts = Object.entries(r.parts).map(([k, v]) => `<div class="pp"><div class="pp-l"><span>${PART_LABEL[k]}</span><b>beats ${Math.round(v * 100)}%</b></div>
     <div class="pp-t"><i style="width:${Math.max(2, v * 100)}%;--c:${conv(5 + v * 5)}"></i></div></div>`).join('');
   view.innerHTML = `
@@ -630,6 +633,7 @@ function priceChart(series, range) {
   let pts = series.filter(p => p[0] >= start); if (pts.length < 2) pts = series;
   const step = Math.ceil(pts.length / 500); if (step > 1) pts = pts.filter((_, i) => i % step === 0 || i === pts.length - 1);
   const W = svg.clientWidth, H = svg.clientHeight, M = { l: 6, r: 62, t: 14, b: 26 };
+  if (W < 140 || H < 80) return;  // hidden or mid-navigation: nothing sensible to draw
   svg.setAttribute('viewBox', `0 0 ${W} ${H}`);
   const ys = pts.map(p => p[1]); let lo = Math.min(...ys), hi = Math.max(...ys); const pad = (hi - lo) * .08 || 1; lo -= pad; hi += pad;
   const X = i => M.l + i / (pts.length - 1) * (W - M.l - M.r), Y = v => M.t + (hi - v) / (hi - lo) * (H - M.t - M.b);
@@ -728,7 +732,7 @@ function pfPaint() {
     <div class="xcards">${P.mix_cards.map(c => `<div class="xc ${c.tone}"><div class="xc-top"><span>${esc(c.label)}</span><b>${esc(c.value)}</b></div><p>${esc(c.plain)}</p></div>`).join('')}</div>
     <div class="grid2" style="margin-top:28px"><div class="card"><h3>Year by year</h3><p class="sub">How today’s mix did each calendar year, in euros.</p>${yearBars(P.mix.years)}</div>
       <div class="card"><h3>Where your money is</h3><p class="sub">By type and by group. A spread across groups usually means smoother swings.</p>
-        ${[...P.alloc.kind.map(([k, w]) => [k === 'etf' ? 'Funds (ETFs/ETCs)' : 'Single stocks', w]), ['', null], ...P.alloc.group].map(([k, w]) => w == null ? '<div style="height:12px"></div>' :
+        ${[...P.alloc.kind.map(([k, w]) => [k === 'etf' ? 'Index funds (ETFs/ETCs)' : k === 'fund' ? 'Active funds' : 'Single stocks', w]), ['', null], ...P.alloc.group].map(([k, w]) => w == null ? '<div style="height:12px"></div>' :
           `<div class="pp"><div class="pp-l"><span>${esc(k)}</span><b>${pc(w, false)}</b></div><div class="pp-t"><i style="width:${w * 100}%;--c:var(--teal)"></i></div></div>`).join('')}</div></div>` : ''}
   <div class="sh"><h2>Your trades</h2><span class="more">${P.trades.length} recorded · fees ${euro(T.fees)}</span></div>
   <div class="grid2" style="margin-top:18px"><div class="card"><h3>Add a trade</h3>${tradeForm()}</div><div class="card"><h3>Import</h3>${importBox()}</div></div>

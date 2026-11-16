@@ -73,7 +73,9 @@ def load(force: bool = False) -> dict:
         if os.path.exists(CACHE):
             with open(CACHE) as f:
                 cached = json.load(f)
-            if not force and time.time() - cached["fetched"] < TTL and set(FX.values()) <= set(cached.get("fx", {})):
+            fresh = time.time() - cached["fetched"] < TTL
+            complete = set(FX.values()) <= set(cached.get("fx", {})) and {i["t"] for i in UNIVERSE} <= set(cached["closes"])
+            if not force and fresh and complete:  # a universe.json edit must trigger a refetch, not silently miss tickers
                 return cached
         try:
             data = fetch()
@@ -278,6 +280,12 @@ def explain(m: dict, ccy: str, kind: str) -> list[dict]:
                       "plain": f"It trades in {'British pounds' if ccy in ('GBp', 'GBP') else ccy}. Every number here is converted "
                                "to euros, so part of the gain or loss comes from that currency moving against the euro.",
                       "tone": "neutral"})
+    if kind == "fund":
+        cards.append({"key": "fee", "label": "Fees (active fund)", "value": "in the returns",
+                      "plain": "A manager picks the holdings instead of copying an index, which costs more: often 1–2% a year, "
+                               "sometimes plus a performance fee. It's taken out automatically, so the returns above are already "
+                               "after fees. The exact costs are in the fund's key information document (KID).",
+                      "tone": "neutral"})
     if kind == "etf":
         cards.append({"key": "fee", "label": "Fees (TER)", "value": "in the returns",
                       "plain": "An ETF's yearly fee is taken out of the fund automatically, so the returns above are already "
@@ -301,11 +309,30 @@ def screen(data: dict) -> list[dict]:
     return sorted(rows, key=lambda r: -r["score"])
 
 
+def vs_index(r: dict, b: dict) -> dict | None:
+    """The question for any active fund: did it beat a cheap index fund of similar companies, like for like?"""
+    m, n = r["m"], b["m"]
+    f, g, span = (m["cagr3"], n["cagr3"], "a year over 3 years") if not m["short"] else (m["r1y"], n["r1y"], "over the last 12 months")
+    if f is None or g is None:
+        return None
+    d = f - g
+    return {"key": "bench", "label": "Vs a cheap index fund", "value": f"{d:+.0%}" + (" /yr" if not m["short"] else ""),
+            "plain": f"It grew {f:+.0%} {span}, against {g:+.0%} for {b['name']}, a low-cost index fund holding similar companies. "
+                     f"Its worst fall was {abs(m['mdd']):.0%}, against {abs(n['mdd']):.0%}. An active fund costs more every year, "
+                     "so it has to beat the index by more than that cost difference to be worth it.",
+            "tone": "good" if d > .02 else "bad" if d < 0 else "neutral"}
+
+
 def instrument(data: dict, ticker: str) -> dict | None:
     rows = {r["t"]: r for r in screen(data)}
     r = rows.get(ticker)
     if not r:
         return None
     peers = [x for x in rows.values() if x["kind"] == r["kind"]]
-    return {**r, "cards": explain(r["m"], r["ccy"], r["kind"]), "series": data["closes"][ticker],
+    cards = explain(r["m"], r["ccy"], r["kind"])
+    if r.get("bench") in rows and (c := vs_index(r, rows[r["bench"]])):
+        cards.insert(0, c)
+    if r.get("also"):
+        cards.append({"key": "also", "label": "Other listing", "value": "ETF class", "plain": r["also"], "tone": "neutral"})
+    return {**r, "cards": cards, "series": data["closes"][ticker],
             "rank": sorted(peers, key=lambda x: -x["score"]).index(r) + 1, "of": len(peers)}

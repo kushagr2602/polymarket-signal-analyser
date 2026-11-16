@@ -37,8 +37,8 @@ TOOLS = [
         "name": "screen_instruments",
         "description": "Ranked screener of European ETFs/ETCs and large stocks (all figures in EUR). Returns ticker, name, group, score 0-100, a one-line reason, last-12-month return, growth per year (3y), swing (volatility), worst fall, return-for-risk.",
         "parameters": {"type": "object", "properties": {
-            "kind": {"type": "string", "enum": ["etf", "stock"], "description": "etf (funds and ETCs) or stock, default etf"},
-            "group": {"type": "string", "description": "Optional group: World, US, Tech, Europe, Emerging, Small caps, Dividend, Themes, Bonds, Gold (ETFs); Europe or US (stocks)"},
+            "kind": {"type": "string", "enum": ["etf", "stock", "fund"], "description": "etf (index ETFs/ETCs), stock, or fund (actively managed funds such as BIT Capital's); default etf"},
+            "group": {"type": "string", "description": "Optional group: World, US, Tech, Europe, Emerging, India, Small caps, Dividend, Themes, Bonds, Gold (ETFs); Europe, US, India (stocks); Tech & growth, Crypto, India (active funds)"},
             "sort": {"type": "string", "enum": ["score", "r1y", "growth", "vol", "mdd", "rpr"], "description": "score (default), r1y, growth, vol (calmest first), mdd (smallest worst fall first), rpr"},
             "query": {"type": "string", "description": "Optional name/ticker substring, e.g. 'nasdaq' or 'VWCE'"},
             "limit": {"type": "integer", "description": "Max rows, default 10"},

@@ -1,86 +1,703 @@
 {
-  "_note": "Screener universe. Tickers verified against Yahoo Finance (Oct 2026). Add your own: {t, kind: etf|stock, group, name, ccy}.",
-  "items": [
-    {"t": "VWCE.DE", "kind": "etf", "group": "World", "name": "Vanguard FTSE All-World (Acc)", "ccy": "EUR"},
-    {"t": "EUNL.DE", "kind": "etf", "group": "World", "name": "iShares Core MSCI World (Acc)", "ccy": "EUR"},
-    {"t": "XDWD.DE", "kind": "etf", "group": "World", "name": "Xtrackers MSCI World 1C", "ccy": "EUR"},
-    {"t": "IUSQ.DE", "kind": "etf", "group": "World", "name": "iShares MSCI ACWI (Acc)", "ccy": "EUR"},
-    {"t": "SPYI.DE", "kind": "etf", "group": "World", "name": "SPDR MSCI ACWI IMI", "ccy": "EUR"},
-    {"t": "SXR8.DE", "kind": "etf", "group": "US", "name": "iShares Core S&P 500 (Acc)", "ccy": "EUR"},
-    {"t": "VUAA.DE", "kind": "etf", "group": "US", "name": "Vanguard S&P 500 (Acc)", "ccy": "EUR"},
-    {"t": "SXRV.DE", "kind": "etf", "group": "US", "name": "iShares NASDAQ 100 (Acc)", "ccy": "EUR"},
-    {"t": "XDWT.DE", "kind": "etf", "group": "Tech", "name": "Xtrackers MSCI World IT 1C", "ccy": "EUR"},
-    {"t": "QDVE.DE", "kind": "etf", "group": "Tech", "name": "iShares S&P 500 IT Sector (Acc)", "ccy": "EUR"},
-    {"t": "EXSA.DE", "kind": "etf", "group": "Europe", "name": "iShares STOXX Europe 600 (Dist)", "ccy": "EUR"},
-    {"t": "MEUD.PA", "kind": "etf", "group": "Europe", "name": "Amundi Core Stoxx Europe 600 (Acc)", "ccy": "EUR"},
-    {"t": "VEUR.AS", "kind": "etf", "group": "Europe", "name": "Vanguard FTSE Developed Europe", "ccy": "EUR"},
-    {"t": "SXRT.DE", "kind": "etf", "group": "Europe", "name": "iShares Core EURO STOXX 50 (Acc)", "ccy": "EUR"},
-    {"t": "EXS1.DE", "kind": "etf", "group": "Europe", "name": "iShares Core DAX (Acc)", "ccy": "EUR"},
-    {"t": "IS3N.DE", "kind": "etf", "group": "Emerging", "name": "iShares Core MSCI EM IMI (Acc)", "ccy": "EUR"},
-    {"t": "VFEM.AS", "kind": "etf", "group": "Emerging", "name": "Vanguard FTSE Emerging Markets (Dist)", "ccy": "EUR"},
-    {"t": "XMME.DE", "kind": "etf", "group": "Emerging", "name": "Xtrackers MSCI Emerging Markets 1C", "ccy": "EUR"},
-    {"t": "IUSN.DE", "kind": "etf", "group": "Small caps", "name": "iShares MSCI World Small Cap (Acc)", "ccy": "EUR"},
-    {"t": "ZPRS.DE", "kind": "etf", "group": "Small caps", "name": "SPDR MSCI World Small Cap", "ccy": "EUR"},
-    {"t": "VHYL.AS", "kind": "etf", "group": "Dividend", "name": "Vanguard FTSE All-World High Dividend (Dist)", "ccy": "EUR"},
-    {"t": "TDIV.AS", "kind": "etf", "group": "Dividend", "name": "VanEck Dev. Markets Dividend Leaders", "ccy": "EUR"},
-    {"t": "ISPA.DE", "kind": "etf", "group": "Dividend", "name": "iShares STOXX Global Select Dividend 100", "ccy": "EUR"},
-    {"t": "2B76.DE", "kind": "etf", "group": "Themes", "name": "iShares Automation & Robotics (Acc)", "ccy": "EUR"},
-    {"t": "XAIX.DE", "kind": "etf", "group": "Themes", "name": "Xtrackers AI & Big Data 1C", "ccy": "EUR"},
-    {"t": "IQQH.DE", "kind": "etf", "group": "Themes", "name": "iShares Global Clean Energy Transition", "ccy": "EUR"},
-    {"t": "VAGF.DE", "kind": "etf", "group": "Bonds", "name": "Vanguard Global Aggregate Bond EUR-Hedged", "ccy": "EUR"},
-    {"t": "EUNA.DE", "kind": "etf", "group": "Bonds", "name": "iShares Core Global Aggregate Bond EUR-Hedged", "ccy": "EUR"},
-    {"t": "SXRP.DE", "kind": "etf", "group": "Bonds", "name": "iShares € Govt Bond 3-7yr (Acc)", "ccy": "EUR"},
-    {"t": "IBCI.DE", "kind": "etf", "group": "Bonds", "name": "iShares € Inflation Linked Govt Bond", "ccy": "EUR"},
-    {"t": "XGLE.DE", "kind": "etf", "group": "Bonds", "name": "Xtrackers Eurozone Government Bond 1C", "ccy": "EUR"},
-    {"t": "4GLD.DE", "kind": "etf", "group": "Gold", "name": "Xetra-Gold (ETC, physical gold)", "ccy": "EUR"},
-
-    {"t": "ASML.AS", "kind": "stock", "group": "Europe", "name": "ASML", "ccy": "EUR"},
-    {"t": "SAP.DE", "kind": "stock", "group": "Europe", "name": "SAP", "ccy": "EUR"},
-    {"t": "NOVO-B.CO", "kind": "stock", "group": "Europe", "name": "Novo Nordisk", "ccy": "DKK"},
-    {"t": "MC.PA", "kind": "stock", "group": "Europe", "name": "LVMH", "ccy": "EUR"},
-    {"t": "NESN.SW", "kind": "stock", "group": "Europe", "name": "Nestlé", "ccy": "CHF"},
-    {"t": "NOVN.SW", "kind": "stock", "group": "Europe", "name": "Novartis", "ccy": "CHF"},
-    {"t": "AZN.L", "kind": "stock", "group": "Europe", "name": "AstraZeneca", "ccy": "GBp"},
-    {"t": "SHEL.L", "kind": "stock", "group": "Europe", "name": "Shell", "ccy": "GBp"},
-    {"t": "SIE.DE", "kind": "stock", "group": "Europe", "name": "Siemens", "ccy": "EUR"},
-    {"t": "ALV.DE", "kind": "stock", "group": "Europe", "name": "Allianz", "ccy": "EUR"},
-    {"t": "TTE.PA", "kind": "stock", "group": "Europe", "name": "TotalEnergies", "ccy": "EUR"},
-    {"t": "OR.PA", "kind": "stock", "group": "Europe", "name": "L'Oréal", "ccy": "EUR"},
-    {"t": "RMS.PA", "kind": "stock", "group": "Europe", "name": "Hermès", "ccy": "EUR"},
-    {"t": "AIR.PA", "kind": "stock", "group": "Europe", "name": "Airbus", "ccy": "EUR"},
-    {"t": "SAN.MC", "kind": "stock", "group": "Europe", "name": "Banco Santander", "ccy": "EUR"},
-    {"t": "ITX.MC", "kind": "stock", "group": "Europe", "name": "Inditex", "ccy": "EUR"},
-    {"t": "RHM.DE", "kind": "stock", "group": "Europe", "name": "Rheinmetall", "ccy": "EUR"},
-    {"t": "DTE.DE", "kind": "stock", "group": "Europe", "name": "Deutsche Telekom", "ccy": "EUR"},
-    {"t": "IFX.DE", "kind": "stock", "group": "Europe", "name": "Infineon", "ccy": "EUR"},
-    {"t": "ADYEN.AS", "kind": "stock", "group": "Europe", "name": "Adyen", "ccy": "EUR"},
-    {"t": "ULVR.L", "kind": "stock", "group": "Europe", "name": "Unilever", "ccy": "GBp"},
-    {"t": "HSBA.L", "kind": "stock", "group": "Europe", "name": "HSBC", "ccy": "GBp"},
-    {"t": "BNP.PA", "kind": "stock", "group": "Europe", "name": "BNP Paribas", "ccy": "EUR"},
-    {"t": "UCG.MI", "kind": "stock", "group": "Europe", "name": "UniCredit", "ccy": "EUR"},
-    {"t": "RACE.MI", "kind": "stock", "group": "Europe", "name": "Ferrari", "ccy": "EUR"},
-    {"t": "SU.PA", "kind": "stock", "group": "Europe", "name": "Schneider Electric", "ccy": "EUR"},
-    {"t": "CS.PA", "kind": "stock", "group": "Europe", "name": "AXA", "ccy": "EUR"},
-    {"t": "AAPL", "kind": "stock", "group": "US", "name": "Apple", "ccy": "USD"},
-    {"t": "MSFT", "kind": "stock", "group": "US", "name": "Microsoft", "ccy": "USD"},
-    {"t": "NVDA", "kind": "stock", "group": "US", "name": "NVIDIA", "ccy": "USD"},
-    {"t": "AMZN", "kind": "stock", "group": "US", "name": "Amazon", "ccy": "USD"},
-    {"t": "GOOGL", "kind": "stock", "group": "US", "name": "Alphabet", "ccy": "USD"},
-    {"t": "META", "kind": "stock", "group": "US", "name": "Meta Platforms", "ccy": "USD"},
-    {"t": "TSLA", "kind": "stock", "group": "US", "name": "Tesla", "ccy": "USD"},
-    {"t": "AVGO", "kind": "stock", "group": "US", "name": "Broadcom", "ccy": "USD"},
-    {"t": "JPM", "kind": "stock", "group": "US", "name": "JPMorgan Chase", "ccy": "USD"},
-    {"t": "LLY", "kind": "stock", "group": "US", "name": "Eli Lilly", "ccy": "USD"},
-    {"t": "V", "kind": "stock", "group": "US", "name": "Visa", "ccy": "USD"},
-    {"t": "MA", "kind": "stock", "group": "US", "name": "Mastercard", "ccy": "USD"},
-    {"t": "COST", "kind": "stock", "group": "US", "name": "Costco", "ccy": "USD"},
-    {"t": "NFLX", "kind": "stock", "group": "US", "name": "Netflix", "ccy": "USD"},
-    {"t": "AMD", "kind": "stock", "group": "US", "name": "AMD", "ccy": "USD"},
-    {"t": "PLTR", "kind": "stock", "group": "US", "name": "Palantir", "ccy": "USD"},
-    {"t": "BRK-B", "kind": "stock", "group": "US", "name": "Berkshire Hathaway", "ccy": "USD"},
-    {"t": "XOM", "kind": "stock", "group": "US", "name": "ExxonMobil", "ccy": "USD"},
-    {"t": "WMT", "kind": "stock", "group": "US", "name": "Walmart", "ccy": "USD"},
-    {"t": "ORCL", "kind": "stock", "group": "US", "name": "Oracle", "ccy": "USD"},
-    {"t": "TSM", "kind": "stock", "group": "US", "name": "TSMC (ADR)", "ccy": "USD"}
-  ]
+ "_note": "Screener universe. Tickers verified against Yahoo Finance (Oct-Nov 2026). kind: etf | stock | fund (active). Optional: bench (ticker to compare an active fund with), also (other listing).",
+ "items": [
+  {
+   "t": "VWCE.DE",
+   "kind": "etf",
+   "group": "World",
+   "name": "Vanguard FTSE All-World (Acc)",
+   "ccy": "EUR"
+  },
+  {
+   "t": "EUNL.DE",
+   "kind": "etf",
+   "group": "World",
+   "name": "iShares Core MSCI World (Acc)",
+   "ccy": "EUR"
+  },
+  {
+   "t": "XDWD.DE",
+   "kind": "etf",
+   "group": "World",
+   "name": "Xtrackers MSCI World 1C",
+   "ccy": "EUR"
+  },
+  {
+   "t": "IUSQ.DE",
+   "kind": "etf",
+   "group": "World",
+   "name": "iShares MSCI ACWI (Acc)",
+   "ccy": "EUR"
+  },
+  {
+   "t": "SPYI.DE",
+   "kind": "etf",
+   "group": "World",
+   "name": "SPDR MSCI ACWI IMI",
+   "ccy": "EUR"
+  },
+  {
+   "t": "SXR8.DE",
+   "kind": "etf",
+   "group": "US",
+   "name": "iShares Core S&P 500 (Acc)",
+   "ccy": "EUR"
+  },
+  {
+   "t": "VUAA.DE",
+   "kind": "etf",
+   "group": "US",
+   "name": "Vanguard S&P 500 (Acc)",
+   "ccy": "EUR"
+  },
+  {
+   "t": "SXRV.DE",
+   "kind": "etf",
+   "group": "US",
+   "name": "iShares NASDAQ 100 (Acc)",
+   "ccy": "EUR"
+  },
+  {
+   "t": "XDWT.DE",
+   "kind": "etf",
+   "group": "Tech",
+   "name": "Xtrackers MSCI World IT 1C",
+   "ccy": "EUR"
+  },
+  {
+   "t": "QDVE.DE",
+   "kind": "etf",
+   "group": "Tech",
+   "name": "iShares S&P 500 IT Sector (Acc)",
+   "ccy": "EUR"
+  },
+  {
+   "t": "EXSA.DE",
+   "kind": "etf",
+   "group": "Europe",
+   "name": "iShares STOXX Europe 600 (Dist)",
+   "ccy": "EUR"
+  },
+  {
+   "t": "MEUD.PA",
+   "kind": "etf",
+   "group": "Europe",
+   "name": "Amundi Core Stoxx Europe 600 (Acc)",
+   "ccy": "EUR"
+  },
+  {
+   "t": "VEUR.AS",
+   "kind": "etf",
+   "group": "Europe",
+   "name": "Vanguard FTSE Developed Europe",
+   "ccy": "EUR"
+  },
+  {
+   "t": "SXRT.DE",
+   "kind": "etf",
+   "group": "Europe",
+   "name": "iShares Core EURO STOXX 50 (Acc)",
+   "ccy": "EUR"
+  },
+  {
+   "t": "EXS1.DE",
+   "kind": "etf",
+   "group": "Europe",
+   "name": "iShares Core DAX (Acc)",
+   "ccy": "EUR"
+  },
+  {
+   "t": "IS3N.DE",
+   "kind": "etf",
+   "group": "Emerging",
+   "name": "iShares Core MSCI EM IMI (Acc)",
+   "ccy": "EUR"
+  },
+  {
+   "t": "VFEM.AS",
+   "kind": "etf",
+   "group": "Emerging",
+   "name": "Vanguard FTSE Emerging Markets (Dist)",
+   "ccy": "EUR"
+  },
+  {
+   "t": "XMME.DE",
+   "kind": "etf",
+   "group": "Emerging",
+   "name": "Xtrackers MSCI Emerging Markets 1C",
+   "ccy": "EUR"
+  },
+  {
+   "t": "IUSN.DE",
+   "kind": "etf",
+   "group": "Small caps",
+   "name": "iShares MSCI World Small Cap (Acc)",
+   "ccy": "EUR"
+  },
+  {
+   "t": "ZPRS.DE",
+   "kind": "etf",
+   "group": "Small caps",
+   "name": "SPDR MSCI World Small Cap",
+   "ccy": "EUR"
+  },
+  {
+   "t": "VHYL.AS",
+   "kind": "etf",
+   "group": "Dividend",
+   "name": "Vanguard FTSE All-World High Dividend (Dist)",
+   "ccy": "EUR"
+  },
+  {
+   "t": "TDIV.AS",
+   "kind": "etf",
+   "group": "Dividend",
+   "name": "VanEck Dev. Markets Dividend Leaders",
+   "ccy": "EUR"
+  },
+  {
+   "t": "ISPA.DE",
+   "kind": "etf",
+   "group": "Dividend",
+   "name": "iShares STOXX Global Select Dividend 100",
+   "ccy": "EUR"
+  },
+  {
+   "t": "2B76.DE",
+   "kind": "etf",
+   "group": "Themes",
+   "name": "iShares Automation & Robotics (Acc)",
+   "ccy": "EUR"
+  },
+  {
+   "t": "XAIX.DE",
+   "kind": "etf",
+   "group": "Themes",
+   "name": "Xtrackers AI & Big Data 1C",
+   "ccy": "EUR"
+  },
+  {
+   "t": "IQQH.DE",
+   "kind": "etf",
+   "group": "Themes",
+   "name": "iShares Global Clean Energy Transition",
+   "ccy": "EUR"
+  },
+  {
+   "t": "VAGF.DE",
+   "kind": "etf",
+   "group": "Bonds",
+   "name": "Vanguard Global Aggregate Bond EUR-Hedged",
+   "ccy": "EUR"
+  },
+  {
+   "t": "EUNA.DE",
+   "kind": "etf",
+   "group": "Bonds",
+   "name": "iShares Core Global Aggregate Bond EUR-Hedged",
+   "ccy": "EUR"
+  },
+  {
+   "t": "SXRP.DE",
+   "kind": "etf",
+   "group": "Bonds",
+   "name": "iShares € Govt Bond 3-7yr (Acc)",
+   "ccy": "EUR"
+  },
+  {
+   "t": "IBCI.DE",
+   "kind": "etf",
+   "group": "Bonds",
+   "name": "iShares € Inflation Linked Govt Bond",
+   "ccy": "EUR"
+  },
+  {
+   "t": "XGLE.DE",
+   "kind": "etf",
+   "group": "Bonds",
+   "name": "Xtrackers Eurozone Government Bond 1C",
+   "ccy": "EUR"
+  },
+  {
+   "t": "4GLD.DE",
+   "kind": "etf",
+   "group": "Gold",
+   "name": "Xetra-Gold (ETC, physical gold)",
+   "ccy": "EUR"
+  },
+  {
+   "t": "ASML.AS",
+   "kind": "stock",
+   "group": "Europe",
+   "name": "ASML",
+   "ccy": "EUR"
+  },
+  {
+   "t": "SAP.DE",
+   "kind": "stock",
+   "group": "Europe",
+   "name": "SAP",
+   "ccy": "EUR"
+  },
+  {
+   "t": "NOVO-B.CO",
+   "kind": "stock",
+   "group": "Europe",
+   "name": "Novo Nordisk",
+   "ccy": "DKK"
+  },
+  {
+   "t": "MC.PA",
+   "kind": "stock",
+   "group": "Europe",
+   "name": "LVMH",
+   "ccy": "EUR"
+  },
+  {
+   "t": "NESN.SW",
+   "kind": "stock",
+   "group": "Europe",
+   "name": "Nestlé",
+   "ccy": "CHF"
+  },
+  {
+   "t": "NOVN.SW",
+   "kind": "stock",
+   "group": "Europe",
+   "name": "Novartis",
+   "ccy": "CHF"
+  },
+  {
+   "t": "AZN.L",
+   "kind": "stock",
+   "group": "Europe",
+   "name": "AstraZeneca",
+   "ccy": "GBp"
+  },
+  {
+   "t": "SHEL.L",
+   "kind": "stock",
+   "group": "Europe",
+   "name": "Shell",
+   "ccy": "GBp"
+  },
+  {
+   "t": "SIE.DE",
+   "kind": "stock",
+   "group": "Europe",
+   "name": "Siemens",
+   "ccy": "EUR"
+  },
+  {
+   "t": "ALV.DE",
+   "kind": "stock",
+   "group": "Europe",
+   "name": "Allianz",
+   "ccy": "EUR"
+  },
+  {
+   "t": "TTE.PA",
+   "kind": "stock",
+   "group": "Europe",
+   "name": "TotalEnergies",
+   "ccy": "EUR"
+  },
+  {
+   "t": "OR.PA",
+   "kind": "stock",
+   "group": "Europe",
+   "name": "L'Oréal",
+   "ccy": "EUR"
+  },
+  {
+   "t": "RMS.PA",
+   "kind": "stock",
+   "group": "Europe",
+   "name": "Hermès",
+   "ccy": "EUR"
+  },
+  {
+   "t": "AIR.PA",
+   "kind": "stock",
+   "group": "Europe",
+   "name": "Airbus",
+   "ccy": "EUR"
+  },
+  {
+   "t": "SAN.MC",
+   "kind": "stock",
+   "group": "Europe",
+   "name": "Banco Santander",
+   "ccy": "EUR"
+  },
+  {
+   "t": "ITX.MC",
+   "kind": "stock",
+   "group": "Europe",
+   "name": "Inditex",
+   "ccy": "EUR"
+  },
+  {
+   "t": "RHM.DE",
+   "kind": "stock",
+   "group": "Europe",
+   "name": "Rheinmetall",
+   "ccy": "EUR"
+  },
+  {
+   "t": "DTE.DE",
+   "kind": "stock",
+   "group": "Europe",
+   "name": "Deutsche Telekom",
+   "ccy": "EUR"
+  },
+  {
+   "t": "IFX.DE",
+   "kind": "stock",
+   "group": "Europe",
+   "name": "Infineon",
+   "ccy": "EUR"
+  },
+  {
+   "t": "ADYEN.AS",
+   "kind": "stock",
+   "group": "Europe",
+   "name": "Adyen",
+   "ccy": "EUR"
+  },
+  {
+   "t": "ULVR.L",
+   "kind": "stock",
+   "group": "Europe",
+   "name": "Unilever",
+   "ccy": "GBp"
+  },
+  {
+   "t": "HSBA.L",
+   "kind": "stock",
+   "group": "Europe",
+   "name": "HSBC",
+   "ccy": "GBp"
+  },
+  {
+   "t": "BNP.PA",
+   "kind": "stock",
+   "group": "Europe",
+   "name": "BNP Paribas",
+   "ccy": "EUR"
+  },
+  {
+   "t": "UCG.MI",
+   "kind": "stock",
+   "group": "Europe",
+   "name": "UniCredit",
+   "ccy": "EUR"
+  },
+  {
+   "t": "RACE.MI",
+   "kind": "stock",
+   "group": "Europe",
+   "name": "Ferrari",
+   "ccy": "EUR"
+  },
+  {
+   "t": "SU.PA",
+   "kind": "stock",
+   "group": "Europe",
+   "name": "Schneider Electric",
+   "ccy": "EUR"
+  },
+  {
+   "t": "CS.PA",
+   "kind": "stock",
+   "group": "Europe",
+   "name": "AXA",
+   "ccy": "EUR"
+  },
+  {
+   "t": "AAPL",
+   "kind": "stock",
+   "group": "US",
+   "name": "Apple",
+   "ccy": "USD"
+  },
+  {
+   "t": "MSFT",
+   "kind": "stock",
+   "group": "US",
+   "name": "Microsoft",
+   "ccy": "USD"
+  },
+  {
+   "t": "NVDA",
+   "kind": "stock",
+   "group": "US",
+   "name": "NVIDIA",
+   "ccy": "USD"
+  },
+  {
+   "t": "AMZN",
+   "kind": "stock",
+   "group": "US",
+   "name": "Amazon",
+   "ccy": "USD"
+  },
+  {
+   "t": "GOOGL",
+   "kind": "stock",
+   "group": "US",
+   "name": "Alphabet",
+   "ccy": "USD"
+  },
+  {
+   "t": "META",
+   "kind": "stock",
+   "group": "US",
+   "name": "Meta Platforms",
+   "ccy": "USD"
+  },
+  {
+   "t": "TSLA",
+   "kind": "stock",
+   "group": "US",
+   "name": "Tesla",
+   "ccy": "USD"
+  },
+  {
+   "t": "AVGO",
+   "kind": "stock",
+   "group": "US",
+   "name": "Broadcom",
+   "ccy": "USD"
+  },
+  {
+   "t": "JPM",
+   "kind": "stock",
+   "group": "US",
+   "name": "JPMorgan Chase",
+   "ccy": "USD"
+  },
+  {
+   "t": "LLY",
+   "kind": "stock",
+   "group": "US",
+   "name": "Eli Lilly",
+   "ccy": "USD"
+  },
+  {
+   "t": "V",
+   "kind": "stock",
+   "group": "US",
+   "name": "Visa",
+   "ccy": "USD"
+  },
+  {
+   "t": "MA",
+   "kind": "stock",
+   "group": "US",
+   "name": "Mastercard",
+   "ccy": "USD"
+  },
+  {
+   "t": "COST",
+   "kind": "stock",
+   "group": "US",
+   "name": "Costco",
+   "ccy": "USD"
+  },
+  {
+   "t": "NFLX",
+   "kind": "stock",
+   "group": "US",
+   "name": "Netflix",
+   "ccy": "USD"
+  },
+  {
+   "t": "AMD",
+   "kind": "stock",
+   "group": "US",
+   "name": "AMD",
+   "ccy": "USD"
+  },
+  {
+   "t": "PLTR",
+   "kind": "stock",
+   "group": "US",
+   "name": "Palantir",
+   "ccy": "USD"
+  },
+  {
+   "t": "BRK-B",
+   "kind": "stock",
+   "group": "US",
+   "name": "Berkshire Hathaway",
+   "ccy": "USD"
+  },
+  {
+   "t": "XOM",
+   "kind": "stock",
+   "group": "US",
+   "name": "ExxonMobil",
+   "ccy": "USD"
+  },
+  {
+   "t": "WMT",
+   "kind": "stock",
+   "group": "US",
+   "name": "Walmart",
+   "ccy": "USD"
+  },
+  {
+   "t": "ORCL",
+   "kind": "stock",
+   "group": "US",
+   "name": "Oracle",
+   "ccy": "USD"
+  },
+  {
+   "t": "TSM",
+   "kind": "stock",
+   "group": "US",
+   "name": "TSMC (ADR)",
+   "ccy": "USD"
+  },
+  {
+   "t": "NIFTYBEES.NS",
+   "kind": "etf",
+   "group": "India",
+   "name": "Nippon India Nifty 50 BeES (NSE)",
+   "ccy": "INR"
+  },
+  {
+   "t": "JUNIORBEES.NS",
+   "kind": "etf",
+   "group": "India",
+   "name": "Nippon India Nifty Next 50 BeES (NSE)",
+   "ccy": "INR"
+  },
+  {
+   "t": "MON100.NS",
+   "kind": "etf",
+   "group": "US",
+   "name": "Motilal Oswal NASDAQ 100 (NSE, INR)",
+   "ccy": "INR"
+  },
+  {
+   "t": "0P0001MZUC.F",
+   "kind": "fund",
+   "group": "Tech & growth",
+   "name": "BIT Global Technology Leaders (D&R)",
+   "ccy": "EUR",
+   "bench": "XDWT.DE",
+   "also": "Also listed as an ETF share class on Xetra: BCT1.DE (price history only from Aug 2026, so it isn't scored yet)."
+  },
+  {
+   "t": "0P0001NSUQ.F",
+   "kind": "fund",
+   "group": "Crypto",
+   "name": "BIT Global Crypto Leaders (I)",
+   "ccy": "EUR"
+  },
+  {
+   "t": "ARKK.MI",
+   "kind": "fund",
+   "group": "Tech & growth",
+   "name": "ARK Innovation UCITS ETF (actively managed)",
+   "ccy": "EUR",
+   "bench": "XDWT.DE"
+  },
+  {
+   "t": "0P00015OFP.F",
+   "kind": "fund",
+   "group": "Tech & growth",
+   "name": "Fidelity Global Technology (A-Acc-EUR)",
+   "ccy": "EUR",
+   "bench": "XDWT.DE"
+  },
+  {
+   "t": "0P0000YWL1.BO",
+   "kind": "fund",
+   "group": "India",
+   "name": "Parag Parikh Flexi Cap (Direct, Growth)",
+   "ccy": "INR",
+   "bench": "NIFTYBEES.NS"
+  },
+  {
+   "t": "RELIANCE.NS",
+   "kind": "stock",
+   "group": "India",
+   "name": "Reliance Industries",
+   "ccy": "INR"
+  },
+  {
+   "t": "TCS.NS",
+   "kind": "stock",
+   "group": "India",
+   "name": "Tata Consultancy Services",
+   "ccy": "INR"
+  },
+  {
+   "t": "HDFCBANK.NS",
+   "kind": "stock",
+   "group": "India",
+   "name": "HDFC Bank",
+   "ccy": "INR"
+  },
+  {
+   "t": "INFY.NS",
+   "kind": "stock",
+   "group": "India",
+   "name": "Infosys",
+   "ccy": "INR"
+  },
+  {
+   "t": "ICICIBANK.NS",
+   "kind": "stock",
+   "group": "India",
+   "name": "ICICI Bank",
+   "ccy": "INR"
+  },
+  {
+   "t": "BHARTIARTL.NS",
+   "kind": "stock",
+   "group": "India",
+   "name": "Bharti Airtel",
+   "ccy": "INR"
+  },
+  {
+   "t": "ITC.NS",
+   "kind": "stock",
+   "group": "India",
+   "name": "ITC",
+   "ccy": "INR"
+  },
+  {
+   "t": "LT.NS",
+   "kind": "stock",
+   "group": "India",
+   "name": "Larsen & Toubro",
+   "ccy": "INR"
+  },
+  {
+   "t": "SBIN.NS",
+   "kind": "stock",
+   "group": "India",
+   "name": "State Bank of India",
+   "ccy": "INR"
+  },
+  {
+   "t": "HINDUNILVR.NS",
+   "kind": "stock",
+   "group": "India",
+   "name": "Hindustan Unilever",
+   "ccy": "INR"
+  },
+  {
+   "t": "BAJFINANCE.NS",
+   "kind": "stock",
+   "group": "India",
+   "name": "Bajaj Finance",
+   "ccy": "INR"
+  }
+ ]
 }
