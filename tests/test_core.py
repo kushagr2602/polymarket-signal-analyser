@@ -341,6 +341,25 @@ def test_ipo_calendar():
             pass
 
 
+def test_discover_flags_and_validation():
+    from src import discover
+    r = lambda t, **m: {"t": t, "m": {"cagr3": None, "vol": None, "rpr": None, "off_high": 0, "r3m": 0, "r1y": 0, "growth": None, "short": False, **m}}
+    rows = [r("CALM", cagr3=.14, vol=.12, rpr=1.5, growth=.14), r("WILD", cagr3=.30, vol=.40, rpr=.9, off_high=-.35, growth=.3),
+            r("WAKE", r3m=.18, r1y=-.05, growth=-.02), r("GOLD", growth=.08, cagr3=.08, vol=.13, rpr=.6), r("VWCE.DE", cagr3=.2, vol=.11, rpr=1.8)]
+    f = {x["key"]: [y["t"] for y in x["rows"]] for x in discover.flags(rows, corr={"GOLD": .1, "WILD": .8, "CALM": .7})}
+    assert f["compounders"] == ["CALM"] and f["beaten"] == ["WILD"] and f["waking"] == ["WAKE"] and f["diversifiers"] == ["GOLD"], f
+    days = [[f"2026-01-{d:02d}", 1.0] for d in range(1, 29)] * 3
+    found = {"IFX.DE": {"name": "Infineon Technologies AG", "closes": days},
+             "FAKE": {"name": "", "closes": []},
+             "IBM": {"name": "International Business Machines Corporation", "closes": days},
+             "TSM": {"name": "TSMC (ADR)", "closes": days, "verified": True}}
+    kept, dropped = discover.validate([{"name": "Infineon", "ticker": "ifx.de"}, {"name": "PQShield", "ticker": "FAKE"},
+                                       {"name": "Arqit Quantum", "ticker": "IBM"}, {"name": "Taiwan Semiconductor", "ticker": "TSM"}], found)
+    assert [k["ticker"] for k in kept] == ["IFX.DE", "TSM"], kept                     # verified screener ticker trusted despite name wording
+    reasons = {d["ticker"]: d["reason"] for d in dropped}
+    assert "no price data" in reasons["FAKE"] and "belongs to International Business Machines" in reasons["IBM"], reasons
+
+
 if __name__ == "__main__":
     tests =[v for k, v in sorted(globals().items()) if k.startswith("test_")]
     for t in tests:

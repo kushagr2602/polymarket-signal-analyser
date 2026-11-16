@@ -93,29 +93,51 @@ EXTRA = os.path.join(ROOT, "data", "extra.json")
 
 
 def extra(tickers: list[str], data: dict) -> dict:
-    """EUR closes for holdings outside the screener universe (fetched on demand, cached like the rest)."""
+    """EUR closes for symbols outside the screener universe (fetched on demand in parallel, cached with their names)."""
     import yfinance as yf
+    from concurrent.futures import ThreadPoolExecutor
+
+    def fetch_one(t):
+        try:
+            tk = yf.Ticker(t)
+            h = tk.history(period="5y", auto_adjust=True)["Close"].dropna()
+            ccy = tk.fast_info.get("currency") or "EUR"
+            try:
+                name = tk.info.get("longName") or tk.info.get("shortName") or ""
+            except Exception:
+                name = ""
+            s = [[d.strftime("%Y-%m-%d"), float(v)] for d, v in h.items()]
+            return t, {"fetched": time.time(), "ccy": ccy, "name": name,
+                       "closes": [[d, round(p, 4)] for d, p in to_eur(s, ccy, data.get("fx", {}).get(FX.get(ccy, "")))]}
+        except Exception:
+            return t, {"fetched": time.time(), "ccy": None, "name": "", "closes": []}  # unknown symbol: don't refetch every request
+
     with _lock:
         cache = json.load(open(EXTRA)) if os.path.exists(EXTRA) else {}
-        changed = False
-        for t in tickers:
-            hit = cache.get(t)
-            if hit and time.time() - hit["fetched"] < TTL:
-                continue
-            try:
-                tk = yf.Ticker(t)
-                h = tk.history(period="5y", auto_adjust=True)["Close"].dropna()
-                ccy = tk.fast_info.get("currency") or "EUR"
-                s = [[d.strftime("%Y-%m-%d"), float(v)] for d, v in h.items()]
-                cache[t] = {"fetched": time.time(), "ccy": ccy,
-                            "closes": [[d, round(p, 4)] for d, p in to_eur(s, ccy, data.get("fx", {}).get(FX.get(ccy, "")))]}
-            except Exception:
-                cache[t] = {"fetched": time.time(), "ccy": None, "closes": []}  # unknown ticker — don't refetch every request
-            changed = True
-        if changed:
+    todo = [t for t in dict.fromkeys(tickers)
+            if not (cache.get(t) and time.time() - cache[t]["fetched"] < TTL and "name" in cache[t])]
+    if todo:
+        with ThreadPoolExecutor(max_workers=6) as ex:
+            got = dict(ex.map(fetch_one, todo))
+        with _lock:
+            cache = json.load(open(EXTRA)) if os.path.exists(EXTRA) else {}
+            cache.update(got)
             os.makedirs(os.path.dirname(EXTRA), exist_ok=True)
             json.dump(cache, open(EXTRA, "w"))
-        return {t: cache[t]["closes"] for t in tickers if t in cache}
+    return {t: cache[t]["closes"] for t in tickers if t in cache}
+
+
+def lookup(tickers: list[str], data: dict) -> dict:
+    """{symbol: {name, closes, verified}} for any Yahoo symbol. Screener tickers are pre-verified; others fetched on demand."""
+    uni = {i["t"]: i["name"] for i in UNIVERSE}
+    out = {t: {"name": uni[t], "closes": data["closes"].get(t) or [], "verified": True} for t in tickers if t in uni}
+    rest = [t for t in tickers if t not in uni]
+    if rest:
+        closes = extra(rest, data)
+        with _lock:
+            cache = json.load(open(EXTRA)) if os.path.exists(EXTRA) else {}
+        out.update({t: {"name": (cache.get(t) or {}).get("name") or "", "closes": closes.get(t) or []} for t in rest})
+    return out
 
 
 # ---------------------------------------------------------------- analysis (pure)

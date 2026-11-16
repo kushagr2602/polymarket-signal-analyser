@@ -615,3 +615,19 @@ a.hr:hover { background: var(--surface); }
 .td-line a { color: var(--accent); text-decoration: none; } .td-line b.up { color: var(--teal); } .td-line b.down { color: var(--red); }
 .card .badge { vertical-align: 2px; }
 @media (max-width: 720px) { .cmdbtn span, .cmdbtn kbd { display: none; } .subnav-r { margin-left: 0; width: 100%; } }
+
+/* ---------- discover ---------- */
+.th-box { position: static; margin-top: 24px; padding: 0; background: none; backdrop-filter: none; }
+.th-chip.adv { border-color: color-mix(in srgb, var(--violet) 45%, var(--line)); }
+.th-chip.basic { border-color: color-mix(in srgb, var(--teal) 45%, var(--line)); }
+.th-card { margin-top: 22px; }
+.th-card h3 { font: 600 24px var(--ff-d); letter-spacing: -.02em; text-transform: none; color: var(--text); margin-bottom: 10px; }
+.th-ex { font-size: 15.5px; line-height: 1.6; color: var(--soft); margin: 0 0 14px; max-width: 80ch; }
+.th-tab { margin-top: 18px; border-top: 1px solid var(--line); }
+.th-r { display: grid; grid-template-columns: minmax(0, 1fr) 70px 74px 64px 80px; gap: 14px; align-items: start; padding: 13px 4px; border-bottom: 1px solid var(--line2); }
+.th-h { font: 500 10.5px var(--ff-m); letter-spacing: .1em; text-transform: uppercase; color: var(--muted); align-items: center; }
+.th-r .num { font: 500 13px var(--ff-m); text-align: right; padding-top: 2px; }
+.th-r small { color: var(--muted); font-size: 12px; } .th-r .why { color: var(--soft); font-size: 13px; }
+.th-r i { font-style: normal; color: var(--violet); } .th-r i.spec { color: var(--accent); }
+.th-link { display: inline-block; margin-top: 6px; font-size: 12.5px; color: var(--accent); text-decoration: none; }
+@media (max-width: 720px) { .th-r { grid-template-columns: minmax(0, 1fr) 64px 64px; } .th-r > :nth-child(4), .th-r > :nth-child(5) { display: none; } }

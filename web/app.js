@@ -145,9 +145,9 @@ function pollRescan() {
 }
 
 /* ---------- router ---------- */
-const ROUTES = { today: vToday, screener: vScreener, i: vInstrument, portfolio: vPortfolio, compare: vCompare, plan: vPlan, alerts: vAlerts, ipos: vIpos, overview: vOverview, signals: vSignals, news: vNews, ask: vAsk, brief: vBrief };
+const ROUTES = { today: vToday, discover: vDiscover, screener: vScreener, i: vInstrument, portfolio: vPortfolio, compare: vCompare, plan: vPlan, alerts: vAlerts, ipos: vIpos, overview: vOverview, signals: vSignals, news: vNews, ask: vAsk, brief: vBrief };
 const NEEDS_SIGNALS = new Set(['overview', 'signals', 'brief']);  // views that read the Polymarket database
-const TITLES = { today: 'Today', screener: 'Screener', portfolio: 'Portfolio', compare: 'Compare', plan: 'Savings plan', alerts: 'Alerts', ipos: 'IPOs', overview: 'Predictions', signals: 'Signals', news: 'News', ask: 'Ask', brief: 'Brief' };
+const TITLES = { today: 'Today', discover: 'Discover', screener: 'Screener', portfolio: 'Portfolio', compare: 'Compare', plan: 'Savings plan', alerts: 'Alerts', ipos: 'IPOs', overview: 'Predictions', signals: 'Signals', news: 'News', ask: 'Ask', brief: 'Brief' };
 function parseHash() {
   const [p0, qs = ''] = location.hash.replace(/^#\/?/, '').split('?');
   const [p, ...rest] = p0.split('/');
@@ -1217,8 +1217,60 @@ async function vToday() {
   </div>`;
 }
 
+/* ---------- discover ---------- */
+const THEMES = [['Post-quantum security', 'adv'], ['Quantum computing', 'adv'], ['European defence', 'adv'], ['Nuclear & uranium', 'adv'],
+                ['Electricity grid', 'adv'], ['Space', 'adv'], ['Obesity drugs (GLP-1)', 'adv'], ['Indian manufacturing', 'adv'],
+                ['Cybersecurity', 'mid'], ['Water infrastructure', 'mid'], ['Robotics', 'mid'],
+                ['Reliable dividend payers', 'basic'], ['Low-cost world ETFs', 'basic'], ['Short-term euro bonds', 'basic']];
+const FLAG_NUM = { rpr: r => `${r.m.rpr == null ? '—' : r.m.rpr.toFixed(2)} return/risk`, off_high: r => `${pc(r.m.off_high)} off its high`,
+                   r3m: r => `${pc(r.m.r3m)} in 3 months`, corr: r => `moves ${r.corr == null ? '—' : r.corr.toFixed(2)} with the world` };
+
+async function vDiscover(q) {
+  view.innerHTML = `<div class="page-h fade"><div class="eyebrow">Discover</div><h1>Ideas worth a closer look</h1>
+    <p>Flags from the real data, and any theme you’re curious about, from post-quantum firms to plain dividend funds. Every suggestion is checked against real prices. These are leads to research, not recommendations.</p></div>
+  <form id="thf" class="ask-box th-box"><input class="in" id="q" placeholder="Explore a theme, e.g. post-quantum security" autocomplete="off" maxlength="80" aria-label="Theme"><button class="btn primary" type="submit">Explore</button></form>
+  <div class="chips">${THEMES.map(([t, lvl]) => `<button class="cf th-chip ${lvl}" type="button" data-th="${esc(t)}">${esc(t)}</button>`).join('')}</div>
+  <div id="th"></div>
+  <div class="sh"><h2>Flagged from the data</h2><span class="more">recomputed daily from real prices</span></div>
+  <div id="fl"><div class="loading sm">${orbHTML(48, 'Scanning for patterns…')}</div></div>`;
+  mountOrbs(view);
+  const run = t => { location.hash = '#/discover?theme=' + enc(t); };
+  $('#thf').onsubmit = e => { e.preventDefault(); const t = $('#q').value.trim(); if (t) run(t); };
+  view.onclick = e => { const c = e.target.closest('[data-th]'); if (c) run(c.dataset.th); };
+  const theme = q && q.get('theme');
+  if (theme) { $('#q').value = theme; exploreTheme(theme); }
+  try { S.disc = S.disc || await api('/api/discover'); } catch (e) { if ($('#fl')) $('#fl').innerHTML = `<div class="empty">${esc(e.message)}</div>`; return; }
+  if (!$('#fl')) return;
+  $('#fl').innerHTML = `<div class="grid2">${S.disc.map(f => `<div class="card"><h3>${esc(f.title)}</h3><p class="sub">${esc(f.plain)}</p>
+    ${f.rows.length ? f.rows.map(r => `<a class="tdm" href="#/i/${enc(r.t)}"><span>${esc(r.name)}<small>${esc(r.t)} · ${esc(r.group)} · score ${r.score}</small></span><b>${FLAG_NUM[f.show](r)}</b></a>`).join('')
+      : '<div class="empty" style="padding:8px 0">Nothing fits this right now.</div>'}</div>`).join('')}</div>`;
+}
+
+async function exploreTheme(t) {
+  const box = $('#th');
+  box.innerHTML = `<div class="thinking" style="margin-top:18px">${orbHTML(36)}<span>Researching “${esc(t)}” and checking every suggestion against real prices…</span></div>`; mountOrbs(box);
+  let x;
+  try { x = await api('/api/theme?q=' + enc(t)); }
+  catch (e) { if ($('#th')) $('#th').innerHTML = `<div class="note warn" style="margin-top:18px"><span>!</span><p>${esc(e.message)}</p></div>`; return; }
+  if (!$('#th') || ($('#q') && $('#q').value.trim() !== t)) return;
+  const inUni = new Set((S.screen ? S.screen.rows : []).map(r => r.t));
+  $('#th').innerHTML = `<div class="card th-card fade"><h3>${esc(x.theme)}</h3>
+    <p class="th-ex">${esc(x.explainer)}</p>
+    <div class="note warn"><span>!</span><p><b>What can go wrong:</b> ${esc(x.risks)}</p></div>
+    ${x.simple_route ? `<div class="note info" style="margin-top:8px"><span>i</span><p><b>Simplest route:</b> ${esc(x.simple_route)}</p></div>` : ''}
+    ${x.candidates.length ? `<div class="th-tab"><div class="th-r th-h"><span>Listed</span><span class="num">1 yr</span><span class="num">Per yr</span><span class="num">Swing</span><span class="num">Worst fall</span></div>
+      ${x.candidates.map(c => { const m = c.m || {}; return `<div class="th-r"><span><b>${esc(c.yahoo_name || c.name)}</b> <small>${esc(c.ticker)} · ${esc(c.type || '')}${c.pure_play ? ' · <i>pure play</i>' : ''}${c.speculative ? ' · <i class="spec">speculative</i>' : ''}</small><br><small class="why">${esc(c.why || '')}</small>
+        ${inUni.has(c.ticker) ? `<a class="th-link" href="#/i/${enc(c.ticker)}">Open in screener →</a>` : `<a class="th-link" href="https://finance.yahoo.com/quote/${enc(c.ticker)}" target="_blank" rel="noopener">Yahoo Finance ↗</a>`}</span>
+        <span class="num ${tone(m.r1y)}">${pc(m.r1y)}</span><span class="num ${tone(m.growth)}">${pc(m.growth)}${m.short ? '*' : ''}</span><span class="num">${pc(m.vol, false)}</span><span class="num">${pc(m.mdd)}</span></div>`; }).join('')}</div>
+      <p class="hint">All figures in euros. * = less than 3 years of history. “Speculative” = swings over 45% a year or very little history: small, young or volatile.</p>`
+      : '<div class="empty">None of the suggestions checked out against real price data. Try a broader theme.</div>'}
+    ${x.private && x.private.length ? `<h3 style="margin-top:22px">Private, can’t buy these directly</h3>${x.private.map(p => `<p class="td-line"><b>${esc(p.name)}</b> ${esc(p.why || '')}</p>`).join('')}` : ''}
+    ${x.dropped && x.dropped.length ? `<p class="hint" style="margin-top:16px">Dropped ${plural(x.dropped.length, 'suggestion')} that didn’t check out: ${x.dropped.map(d => `${esc(d.name)} (${esc(d.reason)})`).join('; ')}.</p>` : ''}
+    <p class="disc" style="margin-top:14px">Researched by ${esc(x.model)}, prices from Yahoo Finance. A theme being promising doesn’t make every company in it a good investment. Past performance doesn’t predict future returns.</p></div>`;
+}
+
 /* ---------- command bar (⌘K) ---------- */
-const PAGES = [['today', 'Today'], ['screener', 'Screener'], ['portfolio', 'Portfolio'], ['compare', 'Compare'], ['plan', 'Savings plan'], ['ipos', 'IPOs'],
+const PAGES = [['today', 'Today'], ['discover', 'Discover'], ['screener', 'Screener'], ['portfolio', 'Portfolio'], ['compare', 'Compare'], ['plan', 'Savings plan'], ['ipos', 'IPOs'],
                ['alerts', 'Alerts'], ['ask', 'Ask'], ['overview', 'Predictions'], ['signals', 'Prediction signals'], ['news', 'Prediction news'], ['brief', 'Daily brief']];
 let CMD = { items: [], i: 0 };
 function cmdFind(tok) {
@@ -1236,13 +1288,14 @@ function cmdResults(raw) {
     const r = cmdFind(m[2]);
     if (r) out.push({ label: `Savings plan: ${m[3] ? `€${m[3]} a month into ` : ''}${r.name}`, go: `#/plan?t=${enc(r.t)}${m[3] ? '&m=' + m[3].replace(',', '.') : ''}` });
   }
+  if ((m = q.match(/^(discover|explore|theme)\s+(.+)/i))) out.push({ label: `Discover: ${m[2]}`, hint: 'theme explorer', go: '#/discover?theme=' + enc(m[2]) });
   if ((m = q.match(/^ask\s+(.+)/i))) out.push({ label: `Ask: “${m[1]}”`, hint: 'AI analyst', go: '#/ask?q=' + enc(m[1]) });
   if ((m = ql.match(/^screen(?:\s+(etfs?|stocks?|funds?))?\s*(.*)$/))) {
     const kind = { etf: 'etf', etfs: 'etf', stock: 'stock', stocks: 'stock', fund: 'fund', funds: 'fund' }[m[1]] || 'etf';
     const g = m[2] && [...new Set(rows.filter(r => r.kind === kind).map(r => r.group))].find(x => x.toLowerCase().startsWith(m[2].trim()));
     out.push({ label: `Screener: ${kind === 'stock' ? 'stocks' : kind === 'fund' ? 'active funds' : 'ETFs'}${g ? ' · ' + g : ''}`, go: `#/screener?kind=${kind}${g ? '&group=' + enc(g) : ''}` });
   }
-  if (ql && !/^(compare|vs|plan|sparplan|ask|screen)\b/.test(ql)) {
+  if (ql && !/^(compare|vs|plan|sparplan|ask|screen|discover|explore|theme)\b/.test(ql)) {
     rows.filter(r => r.t.toLowerCase().includes(ql) || r.name.toLowerCase().includes(ql)).slice(0, 6)
       .forEach(r => out.push({ label: r.name, hint: `${r.t} · ${r.group} · score ${r.score}`, go: '#/i/' + enc(r.t) }));
   }

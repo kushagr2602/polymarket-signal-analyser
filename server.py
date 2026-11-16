@@ -205,6 +205,38 @@ def screen():
     return cached("screen", 600, go)
 
 
+@app.get("/api/discover")
+def discover_flags():
+    from src import discover, market
+
+    def go():
+        data = market.load()
+        rows = market.screen(data)
+        world = data["closes"].get("VWCE.DE") or []
+        corr = {r["t"]: market.correlation(data["closes"][r["t"]], world) for r in rows if r["t"] != "VWCE.DE"}
+        keep = ("r1y", "r3m", "growth", "vol", "mdd", "rpr", "off_high")
+        return [{**f, "rows": [{k: r[k] for k in ("t", "name", "kind", "group", "score", "why")} | {"m": {k: r["m"].get(k) for k in keep},
+                                                                                              "corr": r.get("corr")} for r in f["rows"]]}
+                for f in discover.flags(rows, corr=corr)]
+    return cached("discover", 600, go)
+
+
+@app.get("/api/theme")
+def explore_theme(q: str, request: Request):
+    from src import discover, market
+    q = " ".join(q.split())[:80]
+    if len(q) < 3:
+        raise HTTPException(400, "Type a theme, e.g. post-quantum security.")
+    if llm.client is None:
+        raise HTTPException(503, "No OpenAI key configured.")
+    key = "theme:" + q.lower()
+    with _lock:
+        fresh = key in _cache and time.time() - _cache[key][0] < 86400
+    if not fresh:
+        limit(request, "theme", 15)  # only new explorations cost money; cached ones are free
+    return cached(key, 86400, lambda: discover.explore(q, market.load()))
+
+
 @app.get("/api/instrument/{ticker}")
 def instrument(ticker: str):
     from src import market
