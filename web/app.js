@@ -148,7 +148,7 @@ function pollRescan() {
 
 /* ---------- router ---------- */
 const ROUTES = { screener: vScreener, i: vInstrument, portfolio: vPortfolio, overview: vOverview, signals: vSignals, news: vNews, ask: vAsk, brief: vBrief };
-const NEEDS_SIGNALS = new Set(['overview', 'signals', 'ask', 'brief']);  // views that read the Polymarket database
+const NEEDS_SIGNALS = new Set(['overview', 'signals', 'brief']);  // views that read the Polymarket database
 const TITLES = { screener: 'Screener', portfolio: 'Portfolio', overview: 'Predictions', signals: 'Signals', news: 'News', ask: 'Ask', brief: 'Brief' };
 function parseHash() {
   const [p0, qs = ''] = location.hash.replace(/^#\/?/, '').split('?');
@@ -460,13 +460,13 @@ function chatHTML() {
     (S.asking ? `<div class="thinking">${orbHTML(36)}<span>Agent planning tool calls…</span></div>` : '');
 }
 function vAsk() {
-  const t = Object.keys(S.data.watchlist.tickers), a = t[0] || 'NVDA', b = t[1] || a;
-  view.innerHTML = `<div class="page-h fade"><div class="eyebrow">Ask the desk</div><h1>Question the data</h1>
-    <p>An agent that plans tool calls over the scanned signals and the latest brief. It never searches the open web, and it shows which lookups it ran.</p></div>
-  <div class="chat"><div class="prompts">${[`Which signals threaten ${a}?`, `What's the Fed read-through for ${b}?`, 'What closes in the next two weeks?', 'Where is the most money stacked?']
+  view.innerHTML = `<div class="page-h fade"><div class="eyebrow">Ask</div><h1>Ask about your money</h1>
+    <p>Ask in plain words about your portfolio, any fund or stock in the screener, or the prediction signals. It looks the numbers up (and shows you which lookups it ran), explains the jargon, and never tells you to buy or sell. Your portfolio is only visible to it when the app runs on your own computer.</p></div>
+  <div class="chat"><div class="prompts">${['Am I too exposed to tech?', 'What is my riskiest holding, in plain English?', 'Which world ETFs are the calmest?',
+      'Explain what a 20% worst fall would mean for my portfolio', 'How does VWCE compare with an S&P 500 fund?']
     .map(p => `<button class="cf" type="button" data-p="${esc(p)}">${esc(p)}</button>`).join('')}</div>
     <div id="log">${chatHTML()}</div>
-    <form class="ask-box" id="askf"><input class="in" id="askq" placeholder="Ask about signals, exposure or catalysts…" autocomplete="off" maxlength="600" aria-label="Your question"><button class="btn primary" type="submit">Ask</button></form></div>`;
+    <form class="ask-box" id="askf"><input class="in" id="askq" placeholder="e.g. Is my portfolio spread out enough?" autocomplete="off" maxlength="600" aria-label="Your question"><button class="btn primary" type="submit">Ask</button></form></div>`;
   const send = async q => {
     q = q.trim(); if (!q || S.asking) return;
     const hist = S.chat.slice(-6).map(({ role, content }) => ({ role, content }));

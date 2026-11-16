@@ -165,6 +165,43 @@ def test_portfolio_average_cost_and_csv():
     assert mix == [["2025-01-01", 25], ["2025-01-02", 27]], mix
 
 
+def test_agent_never_runs_the_portfolio_tool_for_remote_requests():
+    from types import SimpleNamespace as NS
+    from src import agent, llm
+    names = lambda private: {t["function"]["name"] for t in agent.tools_for(private)}
+    assert "get_my_portfolio" in names(True) and "get_my_portfolio" not in names(False)
+
+    sent, step = [], {"n": 0}
+
+    class TC:  # a tool call the (fake) model makes even though the tool wasn't offered
+        id, function = "c1", NS(name="get_my_portfolio", arguments="{}")
+        def model_dump(self): return {"id": self.id, "type": "function", "function": {"name": "get_my_portfolio", "arguments": "{}"}}
+
+    class C:
+        class chat:
+            class completions:
+                @staticmethod
+                def create(**kw):
+                    sent.append(kw)
+                    step["n"] += 1
+                    msg = NS(tool_calls=[TC()], content=None) if step["n"] == 1 else NS(tool_calls=None, content="done")
+                    return NS(choices=[NS(message=msg)], model="fake")
+
+    called = []
+    saved, llm.client, real = llm.client, C, agent._IMPL["get_my_portfolio"]
+    agent._IMPL["get_my_portfolio"] = lambda: called.append(1) or {"holdings": ["secret"]}
+    llm._ok.clear()
+    try:
+        answer, trace = agent.run("what do I own?", private=False)
+        assert not called, "portfolio tool executed for a remote request"
+        assert trace == ["get_my_portfolio → error"] and answer == "done", trace
+        tool_msg = [m for m in sent[-1]["messages"] if m.get("role") == "tool"][0]
+        assert "not available" in tool_msg["content"] and "secret" not in tool_msg["content"]
+    finally:
+        llm.client, agent._IMPL["get_my_portfolio"] = saved, real
+        llm._ok.clear()
+
+
 if __name__ == "__main__":
     tests =[v for k, v in sorted(globals().items()) if k.startswith("test_")]
     for t in tests:

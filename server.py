@@ -120,7 +120,7 @@ def ask(body: Ask, request: Request):
         raise HTTPException(400, "Ask something.")
     hist = [{"role": m["role"], "content": str(m["content"])[:2000]} for m in body.history[-6:]
             if m.get("role") in ("user", "assistant")]
-    answer, trace = agent.run(q, hist)
+    answer, trace = agent.run(q, hist, private=is_local(request))  # portfolio tool only on your own machine
     return {"answer": answer, "trace": trace}
 
 
@@ -234,11 +234,15 @@ def explain(ticker: str, request: Request):
 
 # ---------------------------------------------------------------- portfolio (local only)
 
-def local_only(request: Request):
-    """Your trades never leave this machine: refuse anything that isn't a direct localhost request
-    (a hosted deploy sits behind a proxy, which always adds X-Forwarded-For)."""
+def is_local(request: Request) -> bool:
+    """A direct request from this machine. A hosted deploy sits behind a proxy, which always adds X-Forwarded-For."""
     host = request.client.host if request.client else ""
-    if request.headers.get("x-forwarded-for") or host not in ("127.0.0.1", "::1"):
+    return not request.headers.get("x-forwarded-for") and host in ("127.0.0.1", "::1")
+
+
+def local_only(request: Request):
+    """Your trades never leave this machine: refuse anything that isn't a direct localhost request."""
+    if not is_local(request):
         raise HTTPException(403, "Your portfolio only opens when the app runs on your own computer.")
 
 
