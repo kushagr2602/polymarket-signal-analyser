@@ -3,13 +3,13 @@ from datetime import datetime, timezone
 
 from apscheduler.schedulers.blocking import BlockingScheduler
 
-from . import database, polymarket, reports, views
+from . import config, database, polymarket, reports, views
 from .filter import score_market
 
 
 def ingest():
     """Fetch markets from Polymarket and upsert into the DB."""
-    markets = polymarket.fetch_markets()
+    markets = polymarket.fetch_markets(queries=polymarket.topics(config.get_watchlist()))
     n = database.insert_markets(markets)
     print(f"ingest: stored {n} markets")
     return n

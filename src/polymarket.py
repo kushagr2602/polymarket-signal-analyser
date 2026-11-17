@@ -34,9 +34,29 @@ def _to_record(m: dict) -> dict:
         "fetched_at": datetime.now(timezone.utc).isoformat(),
     }
 
-def fetch_markets(top: int = 1000) -> list[dict]:
-    """Fetch the top-`top` active markets by volume, paging past Gamma's 100/request cap.
-    Deduped by market_id — pages overlap as live volume reorders them."""
+def topics(watchlist: dict) -> list[str]:
+    """Search terms from the watchlist sectors: "AI & Semiconductors" -> ["AI", "Semiconductors"]."""
+    return sorted({w.strip() for s in watchlist.get("sectors", []) for w in s.split("&") if w.strip()})
+
+
+def search_markets(q: str, min_volume: float, pages: int = 3) -> list[dict]:
+    """Raw active markets matching `q`, above `min_volume`. Catches smaller markets on your topics
+    that the global volume cut misses (e.g. a $210k AI-bill market when the top 1000 ends at ~$260k)."""
+    out = []
+    for page in range(1, pages + 1):
+        j = requests.get(f"{GAMMA_API}/public-search", params={
+            "q": q, "events_status": "active", "limit_per_type": 50, "page": page}, timeout=15).json()
+        for e in j.get("events") or []:
+            out += [m for m in e.get("markets") or [] if not m.get("closed")
+                    and float(m.get("volumeNum") or m.get("volume") or 0) >= min_volume]
+        if not (j.get("pagination") or {}).get("hasMore"):
+            break
+    return out
+
+
+def fetch_markets(top: int = 1000, queries: list[str] = (), min_volume: float = 25_000) -> list[dict]:
+    """The top-`top` active markets by volume (paging past Gamma's 100/request cap), plus markets
+    matching `queries` above `min_volume`. Deduped by market_id — pages overlap as volume reorders them."""
     markets, seen = [], set()
     for offset in range(0, top, PAGE):
         res = requests.get(f"{GAMMA_API}/markets", params={
@@ -55,6 +75,20 @@ def fetch_markets(top: int = 1000) -> list[dict]:
             try:
                 if m["id"] in seen or _is_expired(m):
                     continue  # skip dupes and already-resolved markets
+                seen.add(m["id"])
+                markets.append(_to_record(m))
+            except Exception:
+                continue
+    for q in queries:
+        try:
+            raw = search_markets(q, min_volume)
+        except Exception as e:  # ponytail: a failed topic search shouldn't sink the volume ingest
+            print(f"  topic {q!r} skipped: {e}")
+            continue
+        for m in raw:
+            try:
+                if m["id"] in seen or _is_expired(m):
+                    continue
                 seen.add(m["id"])
                 markets.append(_to_record(m))
             except Exception:
