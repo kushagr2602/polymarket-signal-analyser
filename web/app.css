@@ -663,3 +663,11 @@ a, button, summary, label, .cf, .tr, .sr, .lb-row { touch-action: manipulation; 
 @media (min-width: 3000px) { .wrap { zoom: 1.45; } }
 @media (pointer: coarse) { .desk-only { display: none; } }
 @media (max-width: 720px) { .sh { flex-wrap: wrap; align-items: baseline; gap: 6px 16px; } }
+
+/* ---------- search all markets ---------- */
+.allm { display: block; padding: 16px 8px; color: var(--accent); text-decoration: none; font-size: 14.5px; border-bottom: 1px solid var(--line2); }
+.allm:hover { background: var(--surface); }
+.srch { display: flex; justify-content: space-between; align-items: center; gap: 14px; padding: 13px 8px; border-bottom: 1px solid var(--line2); text-decoration: none; transition: background .15s; }
+.srch:hover { background: var(--surface); } .srch:hover b { color: var(--accent); } .srch:hover .go { color: var(--accent); transform: translateX(4px); }
+.srch b { font-weight: 600; font-size: 15px; transition: color .15s; }
+.srch small { display: block; font: 500 11.5px var(--ff-m); color: var(--muted); margin-top: 3px; }

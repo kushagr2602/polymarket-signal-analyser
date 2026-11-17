@@ -151,9 +151,9 @@ function pollRescan() {
 }
 
 /* ---------- router ---------- */
-const ROUTES = { today: vToday, discover: vDiscover, screener: vScreener, i: vInstrument, portfolio: vPortfolio, compare: vCompare, plan: vPlan, alerts: vAlerts, ipos: vIpos, overview: vOverview, signals: vSignals, news: vNews, ask: vAsk, brief: vBrief };
+const ROUTES = { today: vToday, discover: vDiscover, search: vSearch, screener: vScreener, i: vInstrument, portfolio: vPortfolio, compare: vCompare, plan: vPlan, alerts: vAlerts, ipos: vIpos, overview: vOverview, signals: vSignals, news: vNews, ask: vAsk, brief: vBrief };
 const NEEDS_SIGNALS = new Set(['overview', 'signals', 'brief']);  // views that read the Polymarket database
-const TITLES = { today: 'Today', discover: 'Discover', screener: 'Screener', portfolio: 'Portfolio', compare: 'Compare', plan: 'Savings plan', alerts: 'Alerts', ipos: 'IPOs', overview: 'Predictions', signals: 'Signals', news: 'News', ask: 'Ask', brief: 'Brief' };
+const TITLES = { today: 'Today', discover: 'Discover', search: 'Search', screener: 'Screener', portfolio: 'Portfolio', compare: 'Compare', plan: 'Savings plan', alerts: 'Alerts', ipos: 'IPOs', overview: 'Predictions', signals: 'Signals', news: 'News', ask: 'Ask', brief: 'Brief' };
 function parseHash() {
   const [p0, qs = ''] = location.hash.replace(/^#\/?/, '').split('?');
   const [p, ...rest] = p0.split('/');
@@ -161,7 +161,7 @@ function parseHash() {
 }
 async function route(keepScroll) {
   const { path, arg, q } = parseHash();
-  const navKey = { i: 'screener', signals: 'overview', news: 'overview', brief: 'overview' }[path] || path;
+  const navKey = { i: 'screener', search: 'screener', signals: 'overview', news: 'overview', brief: 'overview' }[path] || path;
   $$('#nav a').forEach(a => a.classList.toggle('on', a.dataset.r === navKey));
   closeCmd();
   if (S.ro) { S.ro.disconnect(); S.ro = null; }
@@ -538,6 +538,16 @@ async function vBrief() {
 }
 
 /* ---------- screener: ETFs + stocks, explained ---------- */
+const KW = { etf: 'etf index fund', fund: 'active fund', stock: 'stock share company' }, KIND_L = { stock: 'Stock', etf: 'ETF', fund: 'Fund' };
+// every word of the query appears in the name, ticker, nicknames, group or kind — so "bitcap tech fund" finds BIT's fund
+const matchQ = (r, q) => { const hay = `${r.name} ${r.t} ${r.aka || ''} ${r.group} ${r.kind} ${KW[r.kind] || ''}`.toLowerCase(); const w = q.toLowerCase().split(/\s+/).filter(Boolean); return w.length > 0 && w.every(x => hay.includes(x)); };
+async function findAny(text) {  // screener list first, then any stock/ETF/fund Yahoo knows
+  const v = (text || '').trim(), vl = v.toLowerCase(); if (!v) return null;
+  const rows = S.screen ? S.screen.rows : [];
+  const local = rows.find(r => r.t.toLowerCase() === vl) || rows.find(r => r.t.toLowerCase().split('.')[0] === vl) || rows.find(r => matchQ(r, v));
+  if (local) return local;
+  try { return (await api('/api/search?q=' + enc(v)))[0] || null; } catch (e) { return null; }
+}
 const SDEF = { kind: 'etf', group: '', sort: 'score', dir: -1, q: '' };
 S.sc = { ...SDEF }; S.screen = null; S.inst = {};
 const pc = (x, signed = true) => x == null ? '—' : (signed && x > 0 ? '+' : '') + (x * 100).toFixed(Math.abs(x) < .1 ? 1 : 0) + '%';
@@ -588,19 +598,20 @@ function scBar() {
   $('#sbar').innerHTML = `<div class="frow">
       <div class="seg" id="kind" role="group" aria-label="Type">${[['etf', 'ETFs & ETCs'], ['stock', 'Stocks'], ['fund', 'Active funds']].map(([k, l]) => `<button type="button" data-k="${k}" class="${s.kind === k ? 'on' : ''}">${l} <small>${rows.filter(r => r.kind === k).length}</small></button>`).join('')}</div>
       <label class="search"><svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6"><circle cx="7" cy="7" r="5"/><path d="m11 11 3.5 3.5"/></svg>
-        <input class="in" id="q" type="search" placeholder="Search by name or ticker" value="${esc(s.q)}" autocomplete="off" aria-label="Search"><kbd>/</kbd></label>
+        <input class="in" id="q" type="search" placeholder="Search by name or ticker (Enter = all markets)" value="${esc(s.q)}" autocomplete="off" aria-label="Search"><kbd>/</kbd></label>
       <select class="in" id="sort" aria-label="Sort by">${SC_SORTS.map(([k, l]) => `<option value="${k}"${s.sort === k ? ' selected' : ''}>Sort: ${l}</option>`).join('')}</select>
     </div>
     <div class="chips"><span class="lab">Group</span><button class="cf${!s.group ? ' on' : ''}" data-g="" type="button">All <small>${mine.length}</small></button>${Object.entries(groups).map(([g, n]) => `<button class="cf${s.group === g ? ' on' : ''}" data-g="${esc(g)}" type="button">${esc(g)} <small>${n}</small></button>`).join('')}</div>`;
   $('#q').oninput = e => { s.q = e.target.value; scList(); };
+  $('#q').onkeydown = e => { if (e.key === 'Enter' && s.q.trim()) location.hash = '#/search?q=' + enc(s.q.trim()); };
   $('#sort').onchange = e => { const x = SC_SORTS.find(z => z[0] === e.target.value); s.sort = x[0]; s.dir = x[2]; scList(); };
 }
 
 function scList() {
   const s = S.sc, q = s.q.trim().toLowerCase(), val = r => s.sort === 'score' ? r.score : r.m[s.sort];
-  const rows = S.screen.rows.filter(r => r.kind === s.kind && (!s.group || r.group === s.group) && (!q || (r.name + ' ' + r.t).toLowerCase().includes(q)))
+  const rows = S.screen.rows.filter(r => q ? matchQ(r, q) : r.kind === s.kind && (!s.group || r.group === s.group))
     .sort((a, b) => { const x = val(a), y = val(b); return x == null ? 1 : y == null ? -1 : (x - y) * s.dir || b.score - a.score; });
-  $('#count').textContent = `${rows.length} ${s.kind === 'stock' ? 'stocks' : s.kind === 'fund' ? 'active funds' : 'funds'} · ${SC_SORTS.find(z => z[0] === s.sort)[1].toLowerCase()}`;
+  $('#count').textContent = q ? `${rows.length} in the ranked list match “${s.q.trim()}”` : `${rows.length} ${s.kind === 'stock' ? 'stocks' : s.kind === 'fund' ? 'active funds' : 'funds'} · ${SC_SORTS.find(z => z[0] === s.sort)[1].toLowerCase()}`;
   $('#asof').textContent = `Prices as of ${fmtDate(S.screen.asOf, true)} · Yahoo Finance`;
   const h = (l, tip, cls = '') => `<span class="num ${cls}" data-tip="${esc(tip)}">${l}</span>`;
   $('#res').innerHTML = `<div class="sr sr-h"><span>#</span><span>Name</span><span data-tip="0–100: how it compares with the others of its type in this list. Hover a row's numbers for what they mean.">Score</span>
@@ -614,7 +625,8 @@ function scList() {
       <span class="num ${tone(r.m.r1y)}">${pc(r.m.r1y)}</span>
       <span class="num col-g ${tone(r.m.growth)}">${pc(r.m.growth)}${r.m.short ? '*' : ''}</span>
       <span class="num col-v">${pc(r.m.vol, false)}</span><span class="num col-d">${pc(r.m.mdd)}</span>
-      <span class="num col-r">${r.m.rpr == null ? '—' : r.m.rpr.toFixed(2)}</span></a>`).join('') || '<div class="empty">Nothing matches. Clear the search or pick another group.</div>');
+      <span class="num col-r">${r.m.rpr == null ? '—' : r.m.rpr.toFixed(2)}</span></a>`).join('') || '<div class="empty">Nothing in the ranked list matches.</div>') +
+    (q ? `<a class="allm" href="#/search?q=${enc(s.q.trim())}">Not what you’re after? Search all markets for “${esc(s.q.trim())}” →</a>` : '');
 }
 
 async function vInstrument(q, t) {
@@ -635,9 +647,10 @@ async function vInstrument(q, t) {
     <div><div class="eyebrow">${esc(r.group)} · ${kindL} · ${esc(r.t)}</div><h1>${esc(r.name)}</h1>
       <p class="ih-sub"><b>€${fmtPrice(m.price)}</b> <span class="${tone(m.r1d)}">${pc(m.r1d)} on the day</span> · as of ${fmtDate(m.asof, true)}${r.ccy !== 'EUR' ? ` · converted from ${r.ccy === 'GBp' ? 'GBP' : esc(r.ccy)}` : ''}</p>
       <p class="ih-why">${esc(r.why)}</p>
+      ${r.outside ? '<p class="hint">This one isn’t in the ranked screener list, so its score shows how it compares with the ones that are.</p>' : ''}
       <div class="cta" style="margin-top:16px"><a class="btn" href="#/compare?t=${enc([r.t, r.bench].filter(Boolean).join(','))}">Compare with others →</a>
         <a class="btn" href="#/plan?t=${enc(r.t)}">Simulate a monthly plan →</a></div></div>
-    <div class="ih-score"><div class="big" style="color:${conv(5 + r.score / 20)}">${r.score}</div><div class="l">score / 100</div><div class="rk">#${r.rank} of ${r.of} ${noun} here</div></div>
+    <div class="ih-score"><div class="big" style="color:${conv(5 + r.score / 20)}">${r.score}</div><div class="l">score / 100</div><div class="rk">${r.outside ? `would rank #${r.rank} among the ${r.of} ${noun} in the screener` : `#${r.rank} of ${r.of} ${noun} here`}</div></div>
   </div>
   <div class="card chart-card"><div class="chart-top"><div class="readout" id="ro"></div>
     <div class="seg" id="rng" role="group" aria-label="Chart range">${['6M', '1Y', '3Y', '5Y'].map(x => `<button type="button" data-r="${x}" class="${x === '3Y' ? 'on' : ''}">${x}</button>`).join('')}</div></div>
@@ -648,6 +661,9 @@ async function vInstrument(q, t) {
   </div>
   <div class="sh"><h2>The numbers, in plain English</h2></div>
   <div class="xcards">${r.cards.map(c => `<div class="xc ${c.tone}"><div class="xc-top"><span>${esc(c.label)}</span><b>${esc(c.value)}</b></div><p>${esc(c.plain)}</p></div>`).join('')}</div>
+  ${r.similar && r.similar.length ? `<div class="sh"><h2>${r.kind === 'stock' ? 'Stocks that move like this' : 'Similar funds to look at'}</h2><a class="more" href="#/compare?t=${enc([r.t, ...r.similar.slice(0, 3).map(x => x.t)].join(','))}">Compare them side by side →</a></div>
+  <p class="sub">From the ranked list, the ones whose price moves most like this one (1.00 = identical). A similar ride with a calmer swing or lower fees is worth a look.</p>
+  <div class="card">${r.similar.map(x => `<a class="tdm" href="#/i/${enc(x.t)}"><span>${esc(x.name)}<small>${esc(x.t)} · ${esc(x.group)} · score ${x.score} · ${esc(x.note)}</small></span><b>${x.corr.toFixed(2)}</b></a>`).join('')}</div>` : ''}
   <div class="card" style="margin-top:28px"><h3>Explain it like I’m new</h3><p class="sub">An AI write-up from only the numbers on this page: what it is, how it behaved, the main risk, and who it usually suits.</p>
     <div id="ai">${r.ai ? aiHTML(r.ai) : '<button class="btn primary" id="ai-go" type="button">Explain this for me</button>'}</div></div>
   <p class="disc">Past performance doesn’t predict future returns. This page helps you understand an investment; it isn’t a recommendation to buy or sell.</p>`;
@@ -709,6 +725,26 @@ function priceChart(series, range) {
   hit.onmouseleave = rest;
 }
 
+/* ---------- search all markets ---------- */
+async function vSearch(q) {
+  const term = (q.get('q') || '').trim();
+  view.innerHTML = `<div class="page-h fade"><div class="eyebrow">Search</div><h1>All markets</h1>
+    <p>Any stock, ETF or fund, by name or ticker. Ones in the ranked list show their score; everything else opens with the same chart and plain-English numbers.</p></div>
+  <form id="sf" class="ask-box th-box"><input class="in" id="q" value="${esc(term)}" placeholder="e.g. Siemens Energy, Coca-Cola, BIT Global Technology" autocomplete="off" maxlength="60" aria-label="Search all markets"><button class="btn primary" type="submit">Search</button></form>
+  <div id="sr">${term ? `<div class="loading sm">${orbHTML(48, 'Searching…')}</div>` : '<div class="empty">Type a company, fund or ticker.</div>'}</div>`;
+  mountOrbs(view);
+  $('#sf').onsubmit = e => { e.preventDefault(); const v = $('#q').value.trim(); if (v) location.hash = '#/search?q=' + enc(v); };
+  if (!term) { $('#q').focus(); return; }
+  let r;
+  try { r = await api('/api/search?q=' + enc(term)); } catch (e) { if ($('#sr')) $('#sr').innerHTML = `<div class="empty">${esc(e.message)}</div>`; return; }
+  if (!$('#sr') || (parseHash().q.get('q') || '').trim() !== term) return;
+  $('#sr').innerHTML = r.length ? `<div class="tl" style="margin-top:18px">${r.map(x => `<a class="srch" href="#/i/${enc(x.t)}">
+      <span><b>${esc(x.name)}</b><small>${esc(x.t)} · ${KIND_L[x.kind] || ''} · ${esc(x.where)}${x.in_list ? ' · in the ranked list' : ''}</small></span>
+      ${x.in_list ? `<span class="sc" style="--c:${conv(5 + x.score / 20)}">${x.score}</span>` : '<span class="go">→</span>'}</a>`).join('')}</div>
+    <p class="hint" style="margin-top:14px">Covers stocks, ETFs and funds listed on Yahoo Finance. Crypto, indices and single bonds aren’t included yet. The same company can appear on several exchanges: pick the one you’d actually buy on.</p>`
+    : `<div class="empty">Nothing found for “${esc(term)}”. Try the ticker symbol or the fund’s exact name.</div>`;
+}
+
 /* ---------- compare ---------- */
 const CMP_COL = ['var(--teal)', 'var(--accent)', 'var(--violet)', 'var(--rose)'];
 const PRESETS = [['World vs S&P 500', 'VWCE.DE,SXR8.DE'], ['Two world ETFs', 'VWCE.DE,EUNL.DE'], ['BIT tech vs index tech', '0P0001MZUC.F,XDWT.DE,SXRV.DE'],
@@ -724,18 +760,17 @@ async function vCompare(q) {
   view.innerHTML = `
   <div class="page-h fade"><div class="eyebrow">Compare</div><h1>Side by side</h1>
     <p>Pick 2 to 4 funds or stocks. The chart shows what €1,000 put into each would have become, so different prices compare fairly.</p></div>
-  <div class="cmp-pick">${ts.map((t, i) => `<span class="tag"><i class="dot" style="background:${CMP_COL[i]}"></i>${esc(byT[t] ? byT[t].name : t)}<button type="button" data-rm="${esc(t)}" aria-label="Remove">✕</button></span>`).join('')}
-    ${ts.length < 4 ? `<form id="cmpf" class="cmp-add"><input class="in" id="cmpq" list="cmp-list" placeholder="${ts.length ? 'Add another…' : 'Add a fund or stock (name or ticker)'}" autocomplete="off"><datalist id="cmp-list">${rows.map(r => `<option value="${esc(r.t)}">${esc(r.name)}</option>`).join('')}</datalist></form>` : ''}</div>
+  <div class="cmp-pick">${ts.map((t, i) => `<span class="tag"><i class="dot" style="background:${CMP_COL[i]}"></i><span class="nm" data-t="${esc(t)}">${esc(byT[t] ? byT[t].name : t)}</span><button type="button" data-rm="${esc(t)}" aria-label="Remove">✕</button></span>`).join('')}
+    ${ts.length < 4 ? `<form id="cmpf" class="cmp-add"><input class="in" id="cmpq" list="cmp-list" placeholder="${ts.length ? 'Add another…' : 'Add any fund or stock (name or ticker)'}" autocomplete="off"><datalist id="cmp-list">${rows.map(r => `<option value="${esc(r.t)}">${esc(r.name)}</option>`).join('')}</datalist></form>` : ''}</div>
   ${ts.length < 2 ? `<div class="chips" style="margin-top:16px"><span class="lab">${one ? 'Compare with' : 'Try'}</span>${sugg.map(([l, v]) => `<a class="cf" href="#/compare?t=${enc(v)}">${esc(l)}</a>`).join('')}</div>` : ''}
   <div id="cmp">${ts.length >= 2 ? `<div class="loading sm">${orbHTML(56, 'Lining them up…')}</div>` : ''}</div>`;
   mountOrbs(view);
   view.onclick = e => { const rm = e.target.closest('[data-rm]'); if (rm) go(ts.filter(t => t !== rm.dataset.rm)); };
   const f = $('#cmpf');
-  if (f) f.onsubmit = e => {
+  if (f) f.onsubmit = async e => {
     e.preventDefault();
-    const v = $('#cmpq').value.trim().toLowerCase(); if (!v) return;
-    const hit = rows.find(r => r.t.toLowerCase() === v) || rows.find(r => r.name.toLowerCase().includes(v) || r.t.toLowerCase().includes(v));
-    if (!hit) return toast('Not in the screener list — try the name or ticker as shown there.', true);
+    const hit = await findAny($('#cmpq').value);
+    if (!hit) return toast('Couldn’t find that. Try the ticker symbol.', true);
     go([...ts, hit.t]);
   };
   const cq = $('#cmpq'); if (cq) cq.onchange = () => f.requestSubmit();
@@ -744,6 +779,7 @@ async function vCompare(q) {
   try { c = await api('/api/compare?t=' + enc(ts.join(','))); }
   catch (e) { if ($('#cmp')) $('#cmp').innerHTML = `<div class="empty">${esc(e.message)}</div>`; return; }
   if (!$('#cmp')) return;
+  c.items.forEach(it => { const el = $$('.cmp-pick .nm').find(x => x.dataset.t === it.t); if (el) el.textContent = it.name; });
   const col = Object.fromEntries(c.items.map((it, i) => [it.t, CMP_COL[ts.indexOf(it.t) >= 0 ? ts.indexOf(it.t) : i]]));
   const ROWS = [['Score', it => it.score, v => v, 1], ['Last 12 months', it => it.m.r1y, v => pc(v), 1], ['Growth per year', it => it.m.growth, v => pc(v), 1],
                 ['Swing (volatility)', it => it.m.vol, v => pc(v, false), -1], ['Worst fall', it => it.m.mdd, v => pc(v), 1], ['Return for the risk', it => it.m.rpr, v => v == null ? '—' : v.toFixed(2), 1]];
@@ -825,10 +861,10 @@ async function vPlan(q) {
     <button class="btn primary" type="submit">Run it</button></form>
   <div id="pl"><div class="loading sm">${orbHTML(56, 'Replaying the months…')}</div></div>`;
   mountOrbs(view);
-  $('#pf2').onsubmit = e => {
+  $('#pf2').onsubmit = async e => {
     e.preventDefault();
-    const f = Object.fromEntries(new FormData(e.target)), hit = rows.find(r => r.t.toLowerCase() === f.t.trim().toLowerCase()) || rows.find(r => r.name.toLowerCase().includes(f.t.trim().toLowerCase()));
-    if (!hit) return toast('Pick something from the screener list.', true);
+    const f = Object.fromEntries(new FormData(e.target)), hit = await findAny(f.t);
+    if (!hit) return toast('Couldn’t find that. Try the ticker symbol.', true);
     location.hash = `#/plan?t=${enc(hit.t)}&m=${enc(String(f.m).replace(',', '.'))}&s=${enc(f.s)}&fee=${enc(String(f.fee || 0).replace(',', '.'))}`;
   };
   let p;
@@ -1061,7 +1097,7 @@ function pfPaint() {
   ${P.notes.length ? `<div class="sh"><h2>What stands out</h2></div><div class="notes">${P.notes.map(n => `<div class="note ${n.kind}"><span>${n.kind === 'warn' ? '!' : 'i'}</span><p>${esc(n.text)}</p></div>`).join('')}</div>` : ''}
   <div class="sh"><h2>What you own</h2></div>
   <div class="hr hr-h"><span>Holding</span><span>Share of portfolio</span><span class="num">Worth</span><span class="num">Profit / loss</span><span class="num col-avg">Avg cost → now</span><span class="num col-sc" data-tip="Its screener score (0–100), if it's in the screener list.">Score</span></div>
-  ${P.holdings.map(h => `<a class="hr" href="${h.screened ? '#/i/' + enc(h.ticker) : '#/portfolio'}">
+  ${P.holdings.map(h => `<a class="hr" href="${h.price != null ? '#/i/' + enc(h.ticker) : '#/portfolio'}">
       <span class="hr-n"><b>${esc(h.name)}</b><span>${esc(h.ticker)} · ${esc(h.group)} · ${+h.qty.toFixed(4)} units</span></span>
       <span class="hr-w"><span class="track"><i style="width:${(h.weight || 0) / maxW * 100}%"></i></span><b>${h.weight == null ? '—' : pc(h.weight, false)}</b></span>
       <span class="num">${euro(h.value)}</span>
@@ -1245,10 +1281,16 @@ const FLAG_NUM = { rpr: r => `${r.m.rpr == null ? '—' : r.m.rpr.toFixed(2)} re
 
 async function vDiscover(q) {
   view.innerHTML = `<div class="page-h fade"><div class="eyebrow">Discover</div><h1>Ideas worth a closer look</h1>
-    <p>Flags from the real data, and any theme you’re curious about, from post-quantum firms to plain dividend funds. Every suggestion is checked against real prices. These are leads to research, not recommendations.</p></div>
+    <p>Flags from the real data, and any theme you’re curious about, from post-quantum firms to plain dividend funds. Every suggestion is checked against real prices. These are leads to research, not recommendations. Looking for one specific fund or company? <a href="#/search" style="color:var(--accent)">Search all markets →</a></p></div>
   <form id="thf" class="ask-box th-box"><input class="in" id="q" placeholder="Explore a theme, e.g. post-quantum security" autocomplete="off" maxlength="80" aria-label="Theme"><button class="btn primary" type="submit">Explore</button></form>
   <div class="chips">${THEMES.map(([t, lvl]) => `<button class="cf th-chip ${lvl}" type="button" data-th="${esc(t)}">${esc(t)}</button>`).join('')}</div>
   <div id="th"></div>
+  <div class="sh"><h2>Fund shortlists</h2><span class="more">ranked on real numbers</span></div>
+  <p class="sub">Start here if you simply want a fund. Each list opens ranked, with a plain reason on every row; open any fund to see similar ones.</p>
+  <div class="chips">${[['Tech & growth funds, like BIT Capital’s', 'kind=fund&group=Tech%20%26%20growth'], ['Global growth funds', 'kind=fund&group=Global%20growth'],
+      ['World index ETFs (the simplest start)', 'kind=etf&group=World'], ['Tech ETFs', 'kind=etf&group=Tech'], ['Theme ETFs', 'kind=etf&group=Themes'],
+      ['Healthcare', 'kind=etf&group=Healthcare'], ['Dividend ETFs', 'kind=etf&group=Dividend'], ['India', 'kind=etf&group=India'], ['Bonds (steadier)', 'kind=etf&group=Bonds']]
+    .map(([l, qs]) => `<a class="cf" href="#/screener?${qs}">${l}</a>`).join('')}</div>
   <div class="sh"><h2>Flagged from the data</h2><span class="more">recomputed daily from real prices</span></div>
   <div id="fl"><div class="loading sm">${orbHTML(48, 'Scanning for patterns…')}</div></div>`;
   mountOrbs(view);
@@ -1271,14 +1313,13 @@ async function exploreTheme(t) {
   try { x = await api('/api/theme?q=' + enc(t)); }
   catch (e) { if ($('#th')) $('#th').innerHTML = `<div class="note warn" style="margin-top:18px"><span>!</span><p>${esc(e.message)}</p></div>`; return; }
   if (!$('#th') || ($('#q') && $('#q').value.trim() !== t)) return;
-  const inUni = new Set((S.screen ? S.screen.rows : []).map(r => r.t));
   $('#th').innerHTML = `<div class="card th-card fade"><h3>${esc(x.theme)}</h3>
     <p class="th-ex">${esc(x.explainer)}</p>
     <div class="note warn"><span>!</span><p><b>What can go wrong:</b> ${esc(x.risks)}</p></div>
     ${x.simple_route ? `<div class="note info" style="margin-top:8px"><span>i</span><p><b>Simplest route:</b> ${esc(x.simple_route)}</p></div>` : ''}
     ${x.candidates.length ? `<div class="th-tab"><div class="th-r th-h"><span>Listed</span><span class="num">1 yr</span><span class="num">Per yr</span><span class="num">Swing</span><span class="num">Worst fall</span></div>
       ${x.candidates.map(c => { const m = c.m || {}; return `<div class="th-r"><span><b>${esc(c.yahoo_name || c.name)}</b> <small>${esc(c.ticker)} · ${esc(c.type || '')}${c.pure_play ? ' · <i>pure play</i>' : ''}${c.speculative ? ' · <i class="spec">speculative</i>' : ''}</small><br><small class="why">${esc(c.why || '')}</small>
-        ${inUni.has(c.ticker) ? `<a class="th-link" href="#/i/${enc(c.ticker)}">Open in screener →</a>` : `<a class="th-link" href="https://finance.yahoo.com/quote/${enc(c.ticker)}" target="_blank" rel="noopener">Yahoo Finance ↗</a>`}</span>
+        <a class="th-link" href="#/i/${enc(c.ticker)}">Open its page →</a></span>
         <span class="num ${tone(m.r1y)}">${pc(m.r1y)}</span><span class="num ${tone(m.growth)}">${pc(m.growth)}${m.short ? '*' : ''}</span><span class="num">${pc(m.vol, false)}</span><span class="num">${pc(m.mdd)}</span></div>`; }).join('')}</div>
       <p class="hint">All figures in euros. * = less than 3 years of history. “Speculative” = swings over 45% a year or very little history: small, young or volatile.</p>`
       : '<div class="empty">None of the suggestions checked out against real price data. Try a broader theme.</div>'}
@@ -1291,9 +1332,11 @@ async function exploreTheme(t) {
 const PAGES = [['today', 'Today'], ['discover', 'Discover'], ['screener', 'Screener'], ['portfolio', 'Portfolio'], ['compare', 'Compare'], ['plan', 'Savings plan'], ['ipos', 'IPOs'],
                ['alerts', 'Alerts'], ['ask', 'Ask'], ['overview', 'Predictions'], ['signals', 'Prediction signals'], ['news', 'Prediction news'], ['brief', 'Daily brief']];
 let CMD = { items: [], i: 0 };
-function cmdFind(tok) {
+const CMD_VERB = /^(compare|vs|plan|sparplan|ask|screen|discover|explore|theme)\b/;
+function cmdFind(tok) {  // screener match, else treat a ticker-looking word as a symbol to look up
   const rows = S.screen ? S.screen.rows : [], t = tok.toLowerCase();
-  return rows.find(r => r.t.toLowerCase() === t || r.t.toLowerCase().split('.')[0] === t) || rows.find(r => r.name.toLowerCase().startsWith(t)) || rows.find(r => r.name.toLowerCase().includes(t));
+  return rows.find(r => r.t.toLowerCase() === t || r.t.toLowerCase().split('.')[0] === t) || rows.find(r => r.name.toLowerCase().startsWith(t))
+    || (t.length >= 4 && rows.find(r => matchQ(r, t))) || (/^[a-z0-9^][a-z0-9.&=^-]{0,14}$/.test(t) ? { t: tok.toUpperCase(), name: tok.toUpperCase() } : null);
 }
 function cmdResults(raw) {
   const q = raw.trim(), ql = q.toLowerCase(), rows = S.screen ? S.screen.rows : [], out = [];
@@ -1313,9 +1356,10 @@ function cmdResults(raw) {
     const g = m[2] && [...new Set(rows.filter(r => r.kind === kind).map(r => r.group))].find(x => x.toLowerCase().startsWith(m[2].trim()));
     out.push({ label: `Screener: ${kind === 'stock' ? 'stocks' : kind === 'fund' ? 'active funds' : 'ETFs'}${g ? ' · ' + g : ''}`, go: `#/screener?kind=${kind}${g ? '&group=' + enc(g) : ''}` });
   }
-  if (ql && !/^(compare|vs|plan|sparplan|ask|screen|discover|explore|theme)\b/.test(ql)) {
-    rows.filter(r => r.t.toLowerCase().includes(ql) || r.name.toLowerCase().includes(ql)).slice(0, 6)
+  if (ql && !CMD_VERB.test(ql)) {
+    rows.filter(r => matchQ(r, ql)).slice(0, 5)
       .forEach(r => out.push({ label: r.name, hint: `${r.t} · ${r.group} · score ${r.score}`, go: '#/i/' + enc(r.t) }));
+    if (q.length >= 2) out.push({ label: `Search all markets for “${q}”`, hint: 'any stock, ETF or fund', go: '#/search?q=' + enc(q) });
   }
   PAGES.filter(([, l]) => !ql || l.toLowerCase().includes(ql)).slice(0, ql ? 3 : 12).forEach(([r, l]) => out.push({ label: `Go to ${l}`, go: '#/' + r }));
   if (q && !/^ask\b/i.test(q) && !out.some(o => o.go.startsWith('#/i/'))) out.push({ label: `Ask: “${q}”`, hint: 'AI analyst', go: '#/ask?q=' + enc(q) });
@@ -1333,7 +1377,20 @@ function closeCmd() { const box = $('#cmdk'); if (box) box.hidden = true; }
 function runCmd(k) { const it = CMD.items[k]; if (!it) return; closeCmd(); location.hash = it.go; }
 $('#cmd-open').onclick = openCmd;
 $('#cmdk').addEventListener('click', e => { const it = e.target.closest('.cmdk-it'); if (it) return runCmd(+it.dataset.k); if (e.target.id === 'cmdk') closeCmd(); });
-$('#cmdk-in').addEventListener('input', e => { CMD = { items: cmdResults(e.target.value), i: 0 }; paintCmd(); });
+let cmdT;
+$('#cmdk-in').addEventListener('input', e => {
+  const v = e.target.value; CMD = { items: cmdResults(v), i: 0 }; paintCmd();
+  clearTimeout(cmdT);
+  if (v.trim().length < 2 || CMD_VERB.test(v.trim().toLowerCase())) return;
+  cmdT = setTimeout(async () => {  // then anything else Yahoo lists under that name
+    let r; try { r = await api('/api/search?q=' + enc(v.trim())); } catch (err) { return; }
+    if ($('#cmdk-in').value !== v || $('#cmdk').hidden) return;
+    const more = r.filter(x => !x.in_list).slice(0, 5).map(x => ({ label: x.name, hint: `${x.t} · ${x.where}`, go: '#/i/' + enc(x.t) }));
+    if (!more.length) return;
+    const at = CMD.items.findIndex(it => it.go.startsWith('#/search'));
+    CMD.items.splice(at < 0 ? CMD.items.length : at, 0, ...more); CMD.items = CMD.items.slice(0, 12); paintCmd();
+  }, 280);
+});
 $('#cmdk-in').addEventListener('keydown', e => {
   if (e.key === 'ArrowDown' || e.key === 'ArrowUp') { e.preventDefault(); CMD.i = (CMD.i + (e.key === 'ArrowDown' ? 1 : -1) + CMD.items.length) % Math.max(1, CMD.items.length); paintCmd(); }
   if (e.key === 'Enter') { e.preventDefault(); runCmd(CMD.i); }

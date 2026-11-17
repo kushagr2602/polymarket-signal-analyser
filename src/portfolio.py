@@ -321,11 +321,11 @@ def analyse(trades: list[dict], data: dict, rows: list[dict]) -> dict:
     held = {t: p for t, p in pos.items() if p["qty"] > 1e-9}
     closes = dict(data["closes"])
     missing = [t for t in held if not closes.get(t)]
-    if missing:
-        closes.update(market.extra(missing, data))
+    found = market.lookup(missing, data) if missing else {}
+    closes.update({t: f["closes"] for t, f in found.items()})
     hold = []
     for t, p in held.items():
-        s, r = closes.get(t) or [], meta.get(t, {})
+        s, r = closes.get(t) or [], meta.get(t) or {k: v for k, v in (found.get(t) or {}).items() if k in ("name", "kind") and v and v != "other"}
         price = s[-1][1] if s else None
         value = p["qty"] * price if price else None
         hold.append({"ticker": t, "name": r.get("name") or t, "group": r.get("group") or "Other", "kind": r.get("kind") or "stock",

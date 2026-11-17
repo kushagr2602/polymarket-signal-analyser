@@ -19,7 +19,7 @@ KINDS = {"drop": "falls % below its 1-year high", "below": "price falls below â‚
 def clean(a: dict, known: set[str]) -> dict:
     t = str(a.get("ticker", "")).strip().upper()
     if t not in known:
-        raise ValueError(f"{t or 'That'} isn't in the screener or your portfolio.")
+        raise ValueError(f"Couldn't find price data for {t or 'that symbol'}.")
     kind = a.get("kind")
     if kind not in KINDS:
         raise ValueError("Pick an alert type.")

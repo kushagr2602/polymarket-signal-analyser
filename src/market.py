@@ -144,6 +144,9 @@ def load(force: bool = False) -> dict:
 EXTRA = os.path.join(DATA, "extra.json")
 
 
+KINDS = {"EQUITY": "stock", "ETF": "etf", "MUTUALFUND": "fund"}  # what the terminal covers; indices, crypto, futures are "other"
+
+
 def extra(tickers: list[str], data: dict) -> dict:
     """EUR closes for symbols outside the screener universe (fetched on demand in parallel, cached with their names)."""
     import yfinance as yf
@@ -155,19 +158,20 @@ def extra(tickers: list[str], data: dict) -> dict:
             h = tk.history(period="5y", auto_adjust=True)["Close"].dropna()
             ccy = tk.fast_info.get("currency") or "EUR"
             try:
-                name = tk.info.get("longName") or tk.info.get("shortName") or ""
+                info = tk.info
+                name, kind = info.get("longName") or info.get("shortName") or "", KINDS.get(info.get("quoteType"), "other")
             except Exception:
-                name = ""
+                name, kind = "", "other"
             s = [[d.strftime("%Y-%m-%d"), float(v)] for d, v in h.items()]
-            return t, {"fetched": time.time(), "ccy": ccy, "name": name,
+            return t, {"fetched": time.time(), "ccy": ccy, "name": name, "kind": kind,
                        "closes": [[d, round(p, 4)] for d, p in to_eur(s, ccy, data.get("fx", {}).get(FX.get(ccy, "")))]}
         except Exception:
-            return t, {"fetched": time.time(), "ccy": None, "name": "", "closes": []}  # unknown symbol: don't refetch every request
+            return t, {"fetched": time.time(), "ccy": None, "name": "", "kind": "other", "closes": []}  # unknown symbol: don't refetch every request
 
     with _lock:
         cache = json.load(open(EXTRA)) if os.path.exists(EXTRA) else {}
     todo = [t for t in dict.fromkeys(tickers)
-            if not (cache.get(t) and time.time() - cache[t]["fetched"] < TTL and "name" in cache[t])]
+            if not (cache.get(t) and time.time() - cache[t]["fetched"] < TTL and "kind" in cache[t])]
     if todo:
         with ThreadPoolExecutor(max_workers=6) as ex:
             got = dict(ex.map(fetch_one, todo))
@@ -184,14 +188,16 @@ def extra(tickers: list[str], data: dict) -> dict:
 
 def lookup(tickers: list[str], data: dict) -> dict:
     """{symbol: {name, closes, verified}} for any Yahoo symbol. Screener tickers are pre-verified; others fetched on demand."""
-    uni = {i["t"]: i["name"] for i in UNIVERSE}
-    out = {t: {"name": uni[t], "closes": data["closes"].get(t) or [], "verified": True} for t in tickers if t in uni}
+    uni = {i["t"]: i for i in UNIVERSE}
+    out = {t: {"name": uni[t]["name"], "kind": uni[t]["kind"], "ccy": uni[t]["ccy"], "closes": data["closes"].get(t) or [], "verified": True}
+           for t in tickers if t in uni}
     rest = [t for t in tickers if t not in uni]
     if rest:
         closes = extra(rest, data)
         with _lock:
             cache = json.load(open(EXTRA)) if os.path.exists(EXTRA) else {}
-        out.update({t: {"name": (cache.get(t) or {}).get("name") or "", "closes": closes.get(t) or []} for t in rest})
+        out.update({t: {"name": (cache.get(t) or {}).get("name") or "", "kind": (cache.get(t) or {}).get("kind") or "other",
+                        "ccy": (cache.get(t) or {}).get("ccy") or "EUR", "closes": closes.get(t) or []} for t in rest})
     return out
 
 
@@ -443,8 +449,7 @@ def correlation(a: list, b: list, days: int = 3 * 365) -> float | None:
 
 def compare(data: dict, tickers: list[str]) -> dict | None:
     """2-4 instruments side by side, with a plain-English summary and how much each pair moves together."""
-    rows = {r["t"]: r for r in screen(data)}
-    items = [rows[t] for t in dict.fromkeys(tickers) if t in rows][:4]
+    items = [r for r in (resolve(data, t) for t in list(dict.fromkeys(tickers))[:4]) if r]
     if len(items) < 2:
         return None
     name = lambda r: r["name"]
@@ -464,7 +469,7 @@ def compare(data: dict, tickers: list[str]) -> dict | None:
     pairs = []
     for i, x in enumerate(items):
         for y in items[i + 1:]:
-            r = correlation(data["closes"][x["t"]], data["closes"][y["t"]])
+            r = correlation(series_of(data, x), series_of(data, y))
             if r is None:
                 continue
             plain = (f"{name(x)} and {name(y)} move almost in lockstep — owning both adds very little spread." if r >= .9 else
@@ -472,7 +477,7 @@ def compare(data: dict, tickers: list[str]) -> dict | None:
                      f"{name(x)} and {name(y)} often move differently — combining them spreads your risk more.")
             pairs.append({"a": x["t"], "b": y["t"], "r": round(r, 2), "plain": plain})
     return {"items": [{k: r[k] for k in ("t", "name", "kind", "group", "ccy", "score", "why", "m")} for r in items],
-            "series": {r["t"]: data["closes"][r["t"]] for r in items}, "summary": summary, "pairs": pairs}
+            "series": {r["t"]: series_of(data, r) for r in items}, "summary": summary, "pairs": pairs}
 
 
 def xirr(flows: list[tuple[str, float]]) -> float | None:
@@ -534,19 +539,100 @@ def project(value: float, monthly: float, years: int, rate: float) -> float:
     return value * (1 + rate) ** years + (monthly * ((1 + rm) ** n - 1) / rm if rm else monthly * n)
 
 
+def series_of(data: dict, r: dict) -> list:
+    return r.get("series") or data["closes"][r["t"]]
+
+
+def resolve(data: dict, ticker: str) -> dict | None:
+    """A scored row for ANY Yahoo symbol. Screener instruments come from the ranked list; anything else is fetched on
+    demand and scored against the screener's instruments of the same kind (where it *would* rank). None if unknown,
+    not a stock/ETF/fund, in an unsupported currency, or with under 60 days of prices."""
+    rows = screen(data)
+    hit = next((r for r in rows if r["t"] == ticker), None)
+    if hit:
+        return hit
+    f = lookup([ticker], data).get(ticker) or {}
+    m = metrics(f.get("closes") or [])
+    if not m or f.get("kind") not in ("stock", "etf", "fund"):
+        return None
+    peers = [r for r in rows if r["kind"] == f["kind"]]
+    parts = {}
+    for key, _, _ in COMPONENTS:
+        vals = sorted(p["m"][key] for p in peers if p["m"].get(key) is not None)
+        parts[key] = bisect.bisect_left(vals, m[key]) / len(vals) if m.get(key) is not None and vals else .5
+    r = {"t": ticker, "kind": f["kind"], "group": "All markets", "name": f["name"] or ticker, "ccy": f["ccy"], "m": m, "parts": parts,
+         "score": round(100 * sum(w * parts[k] for k, w, _ in COMPONENTS)), "outside": True, "series": f["closes"]}
+    r["why"], r["tags"] = why(r), tags(m)
+    r["rank"], r["of"] = 1 + sum(p["score"] > r["score"] for p in peers), len(peers)
+    return r
+
+
+def similar(data: dict, r: dict, n: int = 4) -> list[dict]:
+    """Screener instruments that move most like this one (weekly correlation ≥ 0.5), each with a plain reason to look."""
+    pool = [p for p in screen(data) if p["t"] != r["t"] and (p["kind"] == "stock") == (r["kind"] == "stock")]
+    mine, out = series_of(data, r), []
+    for p in pool:
+        c = correlation(mine, data["closes"][p["t"]])
+        if c is not None and c >= .5:
+            out.append((c, p))
+    res = []
+    for c, p in sorted(out, key=lambda x: -x[0])[:n]:
+        a, b, notes = r["m"], p["m"], []
+        if r["kind"] == "fund" and p["kind"] == "etf":
+            notes.append("index fund, usually much lower fees")
+        if a.get("vol") and b.get("vol") and b["vol"] < a["vol"] * .85:
+            notes.append(f"calmer (swing {b['vol']:.0%} vs {a['vol']:.0%})")
+        if a.get("growth") is not None and b.get("growth") is not None and b["growth"] > a["growth"] + .02:
+            notes.append(f"grew more ({b['growth']:+.0%} vs {a['growth']:+.0%} a year)")
+        if a.get("mdd") is not None and b.get("mdd") is not None and b["mdd"] > a["mdd"] + .05:
+            notes.append(f"smaller worst fall ({b['mdd']:.0%} vs {a['mdd']:.0%})")
+        res.append({"t": p["t"], "name": p["name"], "kind": p["kind"], "group": p["group"], "score": p["score"], "corr": round(c, 2),
+                    "note": "; ".join(notes[:2]) or "similar ride, similar results"})
+    return res
+
+
 def instrument(data: dict, ticker: str) -> dict | None:
-    rows = {r["t"]: r for r in screen(data)}
-    r = rows.get(ticker)
+    r = resolve(data, ticker)
     if not r:
         return None
-    peers = [x for x in rows.values() if x["kind"] == r["kind"]]
+    rows = {x["t"]: x for x in screen(data)}
     cards = explain(r["m"], r["ccy"], r["kind"])
     if r.get("bench") in rows and (c := vs_index(r, rows[r["bench"]])):
         cards.insert(0, c)
     if r.get("also"):
         cards.append({"key": "also", "label": "Other listing", "value": "ETF class", "plain": r["also"], "tone": "neutral"})
-    return {**r, "cards": cards, "series": data["closes"][ticker],
-            "rank": sorted(peers, key=lambda x: -x["score"]).index(r) + 1, "of": len(peers)}
+    out = {**r, "cards": cards, "series": series_of(data, r), "similar": similar(data, r)}
+    if not r.get("outside"):
+        peers = [x for x in rows.values() if x["kind"] == r["kind"]]
+        out["rank"], out["of"] = sorted(peers, key=lambda x: -x["score"]).index(r) + 1, len(peers)
+    return out
+
+
+def matches(q: str, item: dict) -> bool:
+    """Every word of the query appears in the instrument's name, ticker, nicknames, group or kind ("bitcap tech fund")."""
+    hay = " ".join([item["name"], item["t"], item.get("aka", ""), item["group"], item["kind"],
+                    {"etf": "etf index fund", "fund": "active fund", "stock": "stock share company"}[item["kind"]]]).lower()
+    words = q.lower().split()
+    return bool(words) and all(w in hay for w in words)
+
+
+def search(q: str, data: dict) -> list[dict]:
+    """Screener matches first (with their score), then anything Yahoo knows by that name or symbol."""
+    rows = screen(data)
+    out = [{"t": r["t"], "name": r["name"], "kind": r["kind"], "where": r["group"], "in_list": True, "score": r["score"]}
+           for r in rows if matches(q, r)][:8]
+    seen = {o["t"] for o in out}
+    try:
+        import yfinance as yf
+        for x in yf.Search(q, max_results=12).quotes:
+            t, kind = x.get("symbol"), KINDS.get(x.get("quoteType"))
+            if t and kind and t not in seen:
+                seen.add(t)
+                out.append({"t": t, "name": x.get("longname") or x.get("shortname") or t, "kind": kind,
+                            "where": x.get("exchDisp") or x.get("exchange") or "", "in_list": False, "score": None})
+    except Exception:
+        pass  # Yahoo unreachable: screener matches are still useful
+    return out
 
 
 if __name__ == "__main__":

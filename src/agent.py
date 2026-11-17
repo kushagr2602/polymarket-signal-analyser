@@ -45,9 +45,14 @@ TOOLS = [
         }}}},
     {"type": "function", "function": {
         "name": "get_instrument",
-        "description": "Everything about one screener instrument: score, rank, reason, each metric with a plain-English explanation, and calendar-year returns.",
-        "parameters": {"type": "object", "properties": {"ticker": {"type": "string", "description": "e.g. VWCE.DE, ASML.AS, NVDA"}},
+        "description": "Everything about one stock, ETF or fund — ANY Yahoo Finance symbol, not just the screener list: score vs the screener's peers, rank, reason, each metric with a plain-English explanation, calendar-year returns, and similar instruments. Use search_markets first if you only know the name.",
+        "parameters": {"type": "object", "properties": {"ticker": {"type": "string", "description": "Yahoo symbol, e.g. VWCE.DE, ASML.AS, NVDA, RELIANCE.NS"}},
                        "required": ["ticker"]}}},
+    {"type": "function", "function": {
+        "name": "search_markets",
+        "description": "Find the Yahoo symbol for any stock, ETF or fund worldwide by name or ticker. Returns symbol, name, kind, exchange, and the screener score if it is in the ranked list.",
+        "parameters": {"type": "object", "properties": {"query": {"type": "string", "description": "e.g. 'BIT Global Technology', 'Siemens Energy', 'nasdaq etf'"}},
+                       "required": ["query"]}}},
     {"type": "function", "function": {
         "name": "compare_instruments",
         "description": "Compare 2-4 screener instruments: key metrics side by side, a plain summary (who grew most, calmest, smallest worst fall) and how closely each pair moves together (correlation of daily returns; >=0.9 means owning both adds little spread).",
@@ -124,10 +129,17 @@ def get_instrument(ticker: str) -> dict:
     data, _ = _screen()
     r = market.instrument(data, ticker.strip().upper())
     if not r:
-        return {"error": f"{ticker} isn't in the screener list."}
+        return {"error": f"No price data for {ticker}. Try search_markets to find the right symbol."}
     return {"ticker": r["t"], "name": r["name"], "kind": r["kind"], "group": r["group"], "score": r["score"],
             "rank": f"{r['rank']} of {r['of']}", "why": r["why"], "year_returns": {y: round(v, 3) for y, v in r["m"]["years"].items()},
+            "in_ranked_list": not r.get("outside"), "similar": r.get("similar", []),
             "facts": [{"label": c["label"], "value": c["value"], "plain": c["plain"]} for c in r["cards"]]}
+
+
+def search_markets(query: str) -> list[dict]:
+    from . import market
+    data, _ = _screen()
+    return market.search(query, data)[:10]
 
 
 def compare_instruments(tickers: list[str]) -> dict:
@@ -135,7 +147,7 @@ def compare_instruments(tickers: list[str]) -> dict:
     data, _ = _screen()
     c = market.compare(data, [t.strip().upper() for t in tickers])
     if not c:
-        return {"error": "Need at least two tickers that are in the screener."}
+        return {"error": "Need at least two symbols with price data."}
     r2 = lambda x: None if x is None else round(x, 3)
     return {"items": [{"ticker": i["t"], "name": i["name"], "score": i["score"], "last_12m": r2(i["m"]["r1y"]), "growth_per_year": r2(i["m"]["growth"]),
                        "swing": r2(i["m"]["vol"]), "worst_fall": r2(i["m"]["mdd"]), "return_for_risk": r2(i["m"]["rpr"])} for i in c["items"]],
@@ -160,7 +172,7 @@ def get_my_portfolio() -> dict:
 
 _IMPL = {"query_signals": query_signals, "get_latest_brief": get_latest_brief, "portfolio_exposure": portfolio_exposure,
          "screen_instruments": screen_instruments, "get_instrument": get_instrument, "get_my_portfolio": get_my_portfolio,
-         "compare_instruments": compare_instruments}
+         "compare_instruments": compare_instruments, "search_markets": search_markets}
 
 
 def tools_for(private: bool) -> list[dict]:

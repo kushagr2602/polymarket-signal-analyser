@@ -202,7 +202,7 @@ def screen():
         data = market.load()
         rows = market.screen(data)
         return {"asOf": max((r["m"]["asof"] for r in rows), default=None), "fetched": data["fetched"],
-                "rows": [{k: r[k] for k in ("t", "kind", "group", "name", "ccy", "score", "parts", "why", "tags")}
+                "rows": [{k: r.get(k) for k in ("t", "kind", "group", "name", "ccy", "score", "parts", "why", "tags", "aka")}
                          | {"m": {k: v for k, v in r["m"].items() if k != "years"}} for r in rows]}
     return cached("screen", 600, go)
 
@@ -239,34 +239,60 @@ def explore_theme(q: str, request: Request):
     return cached(key, 86400, lambda: discover.explore(q, market.load()))
 
 
-@app.get("/api/instrument/{ticker}")
-def instrument(ticker: str):
+SYMBOL = re.compile(r"[A-Z0-9^][A-Z0-9.&=^\-]{0,19}")
+NOT_FOUND = "Couldn't find price data for that symbol. It may be private, delisted, in an unsupported currency, or not a stock, ETF or fund."
+
+
+def _symbol(t: str, request: Request) -> str:
+    """Validated symbol. Looking up something outside the screener calls Yahoo, so that part is rate-limited."""
     from src import market
-    r = market.instrument(market.load(), ticker.upper())
+    t = t.strip().upper()
+    if not SYMBOL.fullmatch(t):
+        raise HTTPException(400, "That doesn't look like a ticker symbol.")
+    if t not in {i["t"] for i in market.UNIVERSE}:
+        limit(request, "lookup", 120)
+    return t
+
+
+@app.get("/api/search")
+def search(q: str, request: Request):
+    from src import market
+    q = " ".join(q.split())[:60]
+    if len(q) < 2:
+        return []
+    limit(request, "search", 240)
+    return cached("search:" + q.lower(), 3600, lambda: market.search(q, market.load()))
+
+
+@app.get("/api/instrument/{ticker}")
+def instrument(ticker: str, request: Request):
+    from src import market
+    t, data = _symbol(ticker, request), market.load()
+    r = cached(f"inst:{t}:{data['fetched']}", 3600, lambda: market.instrument(data, t))
     if not r:
-        raise HTTPException(404, "Not in the screener universe.")
+        raise HTTPException(404, NOT_FOUND)
     return r
 
 
 @app.get("/api/compare")
-def compare(t: str):
+def compare(t: str, request: Request):
     from src import market
-    r = market.compare(market.load(), [x.strip().upper() for x in t.split(",") if x.strip()][:4])
+    r = market.compare(market.load(), [_symbol(x, request) for x in t.split(",") if x.strip()][:4])
     if not r:
-        raise HTTPException(400, "Pick at least two instruments from the screener.")
+        raise HTTPException(400, "Pick at least two stocks, ETFs or funds with price data.")
     return r
 
 
 @app.get("/api/plan")
-def plan(t: str, monthly: float = 100, start: str = "", fee: float = 0):
+def plan(t: str, request: Request, monthly: float = 100, start: str = "", fee: float = 0):
     from src import market
     if not (1 <= monthly <= 100_000) or not (0 <= fee < monthly):
         raise HTTPException(400, "Monthly amount must be €1–100,000, and the fee less than that.")
-    data, tk = market.load(), t.strip().upper()
-    item = next((i for i in market.UNIVERSE if i["t"] == tk), None)
-    series = data["closes"].get(tk) or []
-    if not item or not series:
-        raise HTTPException(404, "Not in the screener list.")
+    data, tk = market.load(), _symbol(t, request)
+    item = market.resolve(data, tk)
+    if not item:
+        raise HTTPException(404, NOT_FOUND)
+    series = market.series_of(data, item)
     r = market.savings_plan(series, monthly, start or series[0][0], fee)
     if not r:
         raise HTTPException(400, "Not enough price history after that start date.")
@@ -280,9 +306,9 @@ def plan(t: str, monthly: float = 100, start: str = "", fee: float = 0):
 def explain(ticker: str, request: Request):
     """Beginner-friendly write-up of one instrument, from the computed numbers only (cached per day)."""
     from src import market
-    r = market.instrument(market.load(), ticker.upper())
+    r = market.instrument(market.load(), _symbol(ticker, request))
     if not r:
-        raise HTTPException(404, "Not in the screener universe.")
+        raise HTTPException(404, NOT_FOUND)
     if llm.client is None:
         raise HTTPException(503, "No OpenAI key configured.")
     limit(request, "explain", 20)
@@ -392,10 +418,12 @@ def _alerts():
     data = market.load()
     al = alerts.load()
     closes = dict(data["closes"])
+    names = {i["t"]: i["name"] for i in market.UNIVERSE}
     missing = [a["ticker"] for a in al if not closes.get(a["ticker"])]
-    if missing:
-        closes.update(market.extra(missing, data))
-    return {"alerts": alerts.evaluate(al, closes, {i["t"]: i["name"] for i in market.UNIVERSE}), "kinds": alerts.KINDS}
+    for t, f in (market.lookup(missing, data) if missing else {}).items():
+        closes[t] = f["closes"]
+        names[t] = f["name"] or t
+    return {"alerts": alerts.evaluate(al, closes, names), "kinds": alerts.KINDS}
 
 
 def _held() -> set[str]:
@@ -419,8 +447,11 @@ class AlertIn(BaseModel):
 def add_alert(body: AlertIn, request: Request):
     local_only(request)
     from src import alerts, market
+    known, t = {i["t"] for i in market.UNIVERSE} | _held(), body.ticker.strip().upper()
+    if t not in known and SYMBOL.fullmatch(t) and market.resolve(market.load(), t):
+        known.add(t)  # any symbol we can actually price
     try:
-        a = alerts.clean(body.model_dump(), {i["t"] for i in market.UNIVERSE} | _held())
+        a = alerts.clean(body.model_dump(), known)
     except ValueError as e:
         raise HTTPException(400, str(e))
     alerts.save(alerts.load() + [a])

@@ -16,6 +16,11 @@ def test_probability_from_outcome_prices():
     assert r["market_id"] == "1"
 
 
+def test_topics_split_watchlist_sectors():
+    assert polymarket.topics({"sectors": ["AI & Semiconductors", "Macro", " E-Commerce "]}) == ["AI", "E-Commerce", "Macro", "Semiconductors"]
+    assert polymarket.topics({}) == []
+
+
 def test_volume_falls_back_and_default_prob():
     r = polymarket._to_record({"id": "2", "volume": "500"})  # no volumeNum, no prices
     assert r["volume_usd"] == 500.0, r
@@ -358,6 +363,30 @@ def test_discover_flags_and_validation():
     assert [k["ticker"] for k in kept] == ["IFX.DE", "TSM"], kept                     # verified screener ticker trusted despite name wording
     reasons = {d["ticker"]: d["reason"] for d in dropped}
     assert "no price data" in reasons["FAKE"] and "belongs to International Business Machines" in reasons["IBM"], reasons
+
+
+def test_any_symbol_resolves_and_is_scored_against_the_list():
+    from datetime import date, timedelta
+    from src import market
+    bit = next(i for i in market.UNIVERSE if i["t"] == "0P0001MZUC.F")
+    assert market.matches("bitcap tech fund", bit) and market.matches("BIT technology", bit) and not market.matches("bitcap bonds", bit)
+    days = [(date(2022, 1, 3) + timedelta(days=i)).isoformat() for i in range(1500)]
+    grow = lambda rate: [[d, 100 * (1 + rate) ** (i / 365)] for i, d in enumerate(days)]
+    stocks = [i["t"] for i in market.UNIVERSE if i["kind"] == "stock"][:3]
+    data = {"closes": {stocks[0]: grow(.05), stocks[1]: grow(.10), stocks[2]: grow(.20)}}  # no "fetched" → not memoised
+    saved = market.lookup
+    market.lookup = lambda ts, d: {"NEW": {"name": "New Co", "kind": "stock", "ccy": "EUR", "closes": grow(.15)},
+                                   "COIN-X": {"name": "Some coin", "kind": "other", "ccy": "EUR", "closes": grow(.5)}}
+    try:
+        r = market.resolve(data, "NEW")
+        assert r["outside"] and r["name"] == "New Co" and r["of"] == 3 and r["rank"] == 2, (r["rank"], r["of"], r["score"])  # beats 5% and 10%, not 20%
+        assert abs(r["parts"]["growth"] - 2 / 3) < 1e-9
+        assert market.resolve(data, "COIN-X") is None                       # not a stock, ETF or fund
+        assert market.resolve(data, stocks[0])["t"] == stocks[0] and "outside" not in market.resolve(data, stocks[0])
+        c = market.compare(data, ["NEW", stocks[2]])
+        assert [i["t"] for i in c["items"]] == ["NEW", stocks[2]] and len(c["series"]["NEW"]) == 1500
+    finally:
+        market.lookup = saved
 
 
 if __name__ == "__main__":

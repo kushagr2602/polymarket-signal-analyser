@@ -1,5 +1,5 @@
 {
- "_note": "Screener universe. Tickers verified against Yahoo Finance (Oct-Nov 2026). kind: etf | stock | fund (active). Optional: bench (ticker to compare an active fund with), also (other listing).",
+ "_note": "Screener universe. Tickers verified against Yahoo Finance (Oct-Nov 2026). kind: etf | stock | fund (active). Optional: bench (ticker to compare an active fund with), also (other listing). Optional: aka (nicknames for search).",
  "items": [
   {
    "t": "VWCE.DE",
@@ -589,14 +589,16 @@
    "name": "BIT Global Technology Leaders (D&R)",
    "ccy": "EUR",
    "bench": "XDWT.DE",
-   "also": "Also listed as an ETF share class on Xetra: BCT1.DE (price history only from Aug 2026, so it isn't scored yet)."
+   "also": "Also listed as an ETF share class on Xetra: BCT1.DE (price history only from Aug 2026, so it isn't scored yet).",
+   "aka": "bitcap bit capital"
   },
   {
    "t": "0P0001NSUQ.F",
    "kind": "fund",
    "group": "Crypto",
    "name": "BIT Global Crypto Leaders (I)",
-   "ccy": "EUR"
+   "ccy": "EUR",
+   "aka": "bitcap bit capital"
   },
   {
    "t": "ARKK.MI",
@@ -698,6 +700,125 @@
    "group": "India",
    "name": "Bajaj Finance",
    "ccy": "INR"
+  },
+  {
+   "t": "0P0001MZE6.F",
+   "kind": "fund",
+   "group": "Global growth",
+   "name": "BIT Global Leaders (R-II)",
+   "ccy": "EUR",
+   "bench": "VWCE.DE",
+   "aka": "bitcap bit capital"
+  },
+  {
+   "t": "0P0000WEK8.F",
+   "kind": "fund",
+   "group": "Global growth",
+   "name": "Fundsmith Equity (I EUR Acc)",
+   "ccy": "EUR",
+   "bench": "VWCE.DE"
+  },
+  {
+   "t": "0P000171XL.F",
+   "kind": "fund",
+   "group": "Tech & growth",
+   "name": "Pictet Robotics (HR EUR)",
+   "ccy": "EUR",
+   "bench": "2B76.DE"
+  },
+  {
+   "t": "0P000165NJ.F",
+   "kind": "fund",
+   "group": "Tech & growth",
+   "name": "Pictet Digital (Z EUR)",
+   "ccy": "EUR",
+   "bench": "XDWT.DE"
+  },
+  {
+   "t": "0P0001DYQO.F",
+   "kind": "fund",
+   "group": "Tech & growth",
+   "name": "Echiquier Artificial Intelligence (K EUR)",
+   "ccy": "EUR",
+   "bench": "XAIX.DE"
+  },
+  {
+   "t": "0P0000SQ7Q",
+   "kind": "fund",
+   "group": "Tech & growth",
+   "name": "Franklin Technology (Z Acc USD)",
+   "ccy": "USD",
+   "bench": "XDWT.DE"
+  },
+  {
+   "t": "VVSM.DE",
+   "kind": "etf",
+   "group": "Tech",
+   "name": "VanEck Semiconductor",
+   "ccy": "EUR"
+  },
+  {
+   "t": "SEC0.DE",
+   "kind": "etf",
+   "group": "Tech",
+   "name": "iShares MSCI Global Semiconductors (Acc)",
+   "ccy": "EUR"
+  },
+  {
+   "t": "USPY.DE",
+   "kind": "etf",
+   "group": "Themes",
+   "name": "L&G Cyber Security",
+   "ccy": "EUR"
+  },
+  {
+   "t": "DFNS.MI",
+   "kind": "etf",
+   "group": "Themes",
+   "name": "VanEck Defense (Acc)",
+   "ccy": "EUR"
+  },
+  {
+   "t": "URNU.DE",
+   "kind": "etf",
+   "group": "Themes",
+   "name": "Global X Uranium (Acc)",
+   "ccy": "EUR"
+  },
+  {
+   "t": "WTEJ.DE",
+   "kind": "etf",
+   "group": "Themes",
+   "name": "WisdomTree Cloud Computing (Acc)",
+   "ccy": "EUR"
+  },
+  {
+   "t": "GOAI.PA",
+   "kind": "etf",
+   "group": "Themes",
+   "name": "Amundi MSCI Robotics & AI (Acc)",
+   "ccy": "EUR"
+  },
+  {
+   "t": "H2OA.AS",
+   "kind": "etf",
+   "group": "Themes",
+   "name": "iShares Global Water (Acc)",
+   "ccy": "EUR"
+  },
+  {
+   "t": "XDWH.DE",
+   "kind": "etf",
+   "group": "Healthcare",
+   "name": "Xtrackers MSCI World Health Care 1C",
+   "ccy": "EUR"
+  },
+  {
+   "t": "HEAL.AS",
+   "kind": "etf",
+   "group": "Healthcare",
+   "name": "iShares Healthcare Innovation (Acc)",
+   "ccy": "EUR"
   }
  ]
 }
