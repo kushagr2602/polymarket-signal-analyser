@@ -91,7 +91,7 @@ def state(request: Request):
     return {"asOf": last or None, "now": datetime.now(timezone.utc).isoformat(),
             "rescanning": _rescanning(), "watchlist": wl, "local": is_local(request), "models": {r: llm.active(r) for r in llm.ROLES},
             "kpis": views.kpis(rows, n_markets), "signals": rows,
-            "exposure": views.exposure(rows, wl["tickers"]), "hot": views.hot_topics(rows), "trends": _trends(rows)}
+            "exposure": views.exposure(rows, wl["tickers"]), "hot": views.hot_topics(rows), "bets": views.big_bets(rows), "trends": _trends(rows)}
 
 
 def _trends(rows):

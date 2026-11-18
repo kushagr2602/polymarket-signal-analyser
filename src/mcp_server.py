@@ -18,11 +18,11 @@ mcp = FastMCP("financial-scanner")
 
 
 @mcp.tool()
-def query_signals(min_score: int = 5, ticker: str = "", keyword: str = "", limit: int = 15) -> list[dict]:
-    """Search LLM-scored prediction-market signals (question, score 0-10, sector,
-    tickers, implied probability, volume, reasoning). Filter by min_score,
-    ticker (e.g. IREN), or a keyword in the market question."""
-    return agent.query_signals(min_score=min_score, ticker=ticker, keyword=keyword, limit=limit)
+def query_signals(min_score: int = 5, ticker: str = "", keyword: str = "", limit: int = 15, min_impact: int = 0) -> list[dict]:
+    """Search LLM-scored prediction-market signals (question, watchlist score 0-10, market impact 0-10,
+    sector, tickers, implied probability, volume, reasoning, plain-English angle). Filter by min_score,
+    ticker (e.g. NVDA), a keyword in the question, or min_impact=7 for the big market-moving bets."""
+    return agent.query_signals(min_score=min_score, ticker=ticker, keyword=keyword, limit=limit, min_impact=min_impact)
 
 
 @mcp.tool()

@@ -31,6 +31,9 @@ create table if not exists reports (
 
 create index if not exists signals_score_idx on signals (relevance_score desc);
 
+-- Big bets: how much an outcome would move markets broadly, regardless of the watchlist, and what it means.
+alter table signals add column if not exists impact int, add column if not exists angle text;
+
 -- Trends: one compact row per scan snapshot (the scanner saves at most one every ~6 hours).
 create table if not exists snapshots (
     id        bigint generated always as identity primary key,

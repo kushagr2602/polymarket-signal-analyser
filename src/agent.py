@@ -26,12 +26,13 @@ Rules:
 TOOLS = [
     {"type": "function", "function": {
         "name": "query_signals",
-        "description": "Search scored prediction-market signals. Returns market question, relevance score 0-10, sector, affected tickers, implied probability, volume, reasoning.",
+        "description": "Search scored prediction-market signals. Returns market question, relevance score 0-10 (vs the watchlist), impact 0-10 (how much it would move markets broadly), sector, affected tickers, implied probability, volume, reasoning, and a plain-English angle. Use min_impact=7 for the big market-moving bets.",
         "parameters": {"type": "object", "properties": {
             "min_score": {"type": "integer", "description": "Minimum relevance score, default 5"},
             "ticker": {"type": "string", "description": "Filter to one ticker, e.g. IREN"},
             "keyword": {"type": "string", "description": "Substring match on the market question, e.g. 'bitcoin'"},
             "limit": {"type": "integer", "description": "Max rows, default 15"},
+            "min_impact": {"type": "integer", "description": "Minimum market impact 0-10; when set, min_score is ignored and results sort by impact"},
         }}}},
     {"type": "function", "function": {
         "name": "screen_instruments",
@@ -69,8 +70,11 @@ TOOLS = [
 ]
 
 
-def query_signals(min_score: int = 5, ticker: str = "", keyword: str = "", limit: int = 15) -> list[dict]:
-    rows = database.get_signals(min_score=min_score)
+def query_signals(min_score: int = 5, ticker: str = "", keyword: str = "", limit: int = 15, min_impact: int = 0) -> list[dict]:
+    rows = database.get_signals(min_score=0 if min_impact else min_score)
+    if min_impact:
+        rows = sorted((r for r in rows if (r.get("impact") or 0) >= min_impact),
+                      key=lambda r: (-r["impact"], -((r.get("markets") or {}).get("volume_usd") or 0)))
     if ticker:
         rows = [r for r in rows if ticker.upper() in (r.get("affected_tickers") or [])]
     if keyword:
@@ -81,7 +85,7 @@ def query_signals(min_score: int = 5, ticker: str = "", keyword: str = "", limit
         out.append({"question": m.get("question"), "score": r["relevance_score"],
                     "sector": r.get("sector"), "tickers": r.get("affected_tickers"),
                     "probability": m.get("probability"), "volume_usd": m.get("volume_usd"),
-                    "reasoning": r.get("reasoning")})
+                    "reasoning": r.get("reasoning"), "impact": r.get("impact"), "angle": r.get("angle")})
     return out
 
 

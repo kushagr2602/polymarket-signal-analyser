@@ -9,7 +9,7 @@ from .filter import score_market
 
 def ingest():
     """Fetch markets from Polymarket and upsert into the DB."""
-    markets = polymarket.fetch_markets(queries=polymarket.topics(config.get_watchlist()))
+    markets = polymarket.fetch_markets(queries=polymarket.topics(config.get_watchlist()) + polymarket.MARKET_TOPICS)
     n = database.insert_markets(markets)
     print(f"ingest: stored {n} markets")
     return n
@@ -24,7 +24,7 @@ def snapshot():
         recent = database.get_snapshots(days=1)
         if recent and (datetime.now(timezone.utc) - views._ts(recent[-1]["taken_at"])).total_seconds() < SNAPSHOT_EVERY_H * 3600 - 600:
             return
-        database.insert_snapshot(views.snapshot(views.to_rows(database.get_signals(min_score=5))))
+        database.insert_snapshot(views.snapshot(views.to_rows(database.get_signals())))
         print("snapshot: saved")
     except Exception as e:  # most likely the table doesn't exist yet
         print(f"snapshot: skipped ({str(e)[:80]}) — run the snapshots SQL in schema.sql to enable trends")
@@ -42,6 +42,22 @@ def filter_new(limit: int = 300):
             print(f"  skip {m['market_id']}: {e}")
     print(f"filter: scored {scored}/{len(pending)} markets")
     return scored
+
+
+def backfill_impact(limit: int = 100):
+    """Re-score markets that predate the impact score. Bounded per run; the backlog clears over a few scans."""
+    try:
+        pending = database.get_missing_impact(limit)
+    except Exception as e:  # column not added yet — see schema.sql
+        print(f"impact: skipped ({str(e)[:80]})")
+        return 0
+    for m in pending:
+        try:
+            database.upsert_signal(score_market(m))
+        except Exception as e:
+            print(f"  skip {m['market_id']}: {e}")
+    print(f"impact: backfilled {len(pending)}")
+    return len(pending)
 
 
 import os
@@ -78,6 +94,7 @@ def rescore(limit: int = 300):
 def pipeline():
     ingest()
     filter_new(40)  # bounded so a 2-min tick finishes; backlog clears over successive ticks
+    backfill_impact(40)
     snapshot()
 
 
@@ -85,6 +102,7 @@ def main():
     if "--once" in sys.argv:
         ingest()
         filter_new(400)  # manual run: big catch-up
+        backfill_impact(300)
         reports.generate_report()
         snapshot()
         return

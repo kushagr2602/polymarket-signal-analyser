@@ -67,7 +67,7 @@ def _all_rows(table: str, select: str, order: str | None = None) -> list[dict]:
         off += 1000
 
 
-SIGNAL_COLS = ("id,market_id,relevance_score,sector,affected_tickers,reasoning,created_at,"
+SIGNAL_COLS = ("id,market_id,relevance_score,sector,affected_tickers,reasoning,impact,angle,created_at,"
                "markets(question,probability,volume_usd,expiry_date,fetched_at)")
 
 
@@ -76,7 +76,11 @@ def get_signals(min_score: int = 0, limit: int | None = None) -> list[dict]:
     markets dropped. The single clean read path for the dashboard, brief, and chat."""
     now = datetime.now(timezone.utc)
     best: dict[str, dict] = {}
-    for r in _all_rows("signals", SIGNAL_COLS):
+    try:
+        rows = _all_rows("signals", SIGNAL_COLS)
+    except Exception:  # ponytail: impact/angle columns not added yet (schema.sql) — serve without them
+        rows = _all_rows("signals", SIGNAL_COLS.replace("impact,angle,", ""))
+    for r in rows:
         m = r.get("markets") or {}
         exp = m.get("expiry_date")
         try:
@@ -98,6 +102,12 @@ def get_unfiltered_markets(limit: int = 100) -> list[dict]:
     seen = {r["market_id"] for r in _all_rows("signals", "market_id")}
     markets = _all_rows("markets", "*", order="volume_usd")  # highest-volume first
     return [m for m in markets if m["market_id"] not in seen][:limit]
+
+
+def get_missing_impact(limit: int = 100) -> list[dict]:
+    """Markets scored before the impact column existed, highest volume first (gradual backfill)."""
+    ids = {r["market_id"] for r in _all_rows("signals", "market_id,impact") if r.get("impact") is None}
+    return [m for m in _all_rows("markets", "*", order="volume_usd") if m["market_id"] in ids][:limit]
 
 
 def get_top_signals(limit: int = 20) -> list[dict]:

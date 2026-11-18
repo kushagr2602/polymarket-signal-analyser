@@ -34,6 +34,11 @@ def _to_record(m: dict) -> dict:
         "fetched_at": datetime.now(timezone.utc).isoformat(),
     }
 
+# Market-moving themes searched on every scan, whatever the watchlist says.
+MARKET_TOPICS = ["Fed", "ECB", "recession", "inflation", "tariff", "export controls", "Taiwan", "China",
+                 "oil", "Bitcoin", "ETF", "IPO", "acquisition", "antitrust", "FDA", "bill", "regulation"]
+
+
 def topics(watchlist: dict) -> list[str]:
     """Search terms from the watchlist sectors: "AI & Semiconductors" -> ["AI", "Semiconductors"]."""
     return sorted({w.strip() for s in watchlist.get("sectors", []) for w in s.split("&") if w.strip()})

@@ -231,6 +231,10 @@ function vOverview() {
     </div>
   </section>
 
+  <div class="sh"><h2>Big bets</h2></div>
+  <p class="sub">The prediction markets that would move prices the most if they came true, whether or not they touch your watchlist: regulation, rates, trade wars, approvals. The percentage is the crowd's odds today.</p>
+  ${betsHTML(d)}
+
   <section class="kpis fade">
     ${[['Markets scanned', k.markets, 'int', ''], ['Active signals', k.active, 'int', ''], ['High conviction', k.high, 'int', ''],
        ['Money behind them', k.volume, 'money', ''], ['Avg conviction', k.avg, 'dec', '<small>/10</small>']]
@@ -298,6 +302,18 @@ function trendChip(tr) {
   const up = tr.change >= 0, flat = Math.abs(tr.change) < .03;
   return `<span class="trend ${flat ? '' : up ? 'up' : 'down'}" data-tip="Heat now vs ${tr.vs_days} day${tr.vs_days === 1 ? '' : 's'} ago">${flat ? '→' : up ? '▲' : '▼'} ${pc(Math.abs(tr.change), false)} ${spark(tr.spark)}</span>`;
 }
+const IMPACT_L = i => i >= 9 ? 'Moves all markets' : 'Moves a sector';
+function betMove(d, r) { const m = d.trends && d.trends.movers && d.trends.movers.find(x => x.id === r.id); return m ? `<b class="${m.delta > 0 ? 'up' : 'down'}">${m.delta > 0 ? '+' : '−'}${Math.round(Math.abs(m.delta) * 100)} pts today</b>` : ''; }
+function betsHTML(d) {
+  const b = d.bets || [];
+  if (!b.length) return `<div class="empty">No big bets scored yet. Each scan rates how much every market would move prices; they show up here after the next one.</div>`;
+  return `<div class="bets">${b.map(r => `<a class="bet" href="${sigLink({ q: r.market.slice(0, 70), min: 0 })}">
+    <span class="bet-p"><b>${r.prob == null ? '—' : Math.round(r.prob * 100) + '%'}</b><small>chance</small></span>
+    <span class="bet-b"><span class="bet-q">${esc(r.market)}</span>
+      ${r.angle ? `<span class="bet-a">${esc(r.angle)}</span>` : ''}
+      <span class="bet-m"><span class="bet-i${r.impact >= 9 ? ' hi' : ''}">${IMPACT_L(r.impact)}</span>${betMove(d, r)}<span>${money(r.volume)} bet</span>${r.days != null ? `<span>closes in ${plural(r.days, 'day')}</span>` : ''}${r.tickers.length ? `<span>${esc(r.tickers.join(' · '))}</span>` : ''}</span></span></a>`).join('')}</div>`;
+}
+
 function moversHTML(t) {
   if (!t) return '<div class="empty">Trends need one table in your database: run the <code>snapshots</code> SQL at the bottom of <code>schema.sql</code> in Supabase once. The scanner fills it from then on.</div>';
   if (!t.since) return `<div class="empty">Not enough history yet. The scanner saves a snapshot about every 6 hours${t.snapshots ? ` (${plural(t.snapshots, 'so far')})` : ''}; movers appear once one is a day old.</div>`;
@@ -1266,6 +1282,7 @@ function predCard() {
   const d = S.data, tr = d && d.trends, hot = d && d.hot && d.hot[0];
   if (!d) return `<h3>Prediction markets</h3><p class="td-line">${S.stateErr ? 'Prediction signals are unavailable right now.' : 'Loading prediction signals…'}</p><a class="more" href="#/overview">Open Predictions →</a>`;
   return `<h3>Prediction markets</h3>
+    ${(d.bets || []).slice(0, 3).map(r => `<a class="td-bet" href="${sigLink({ q: r.market.slice(0, 70), min: 0 })}"><b>${r.prob == null ? '—' : Math.round(r.prob * 100) + '%'}</b><span>${esc(r.market)}${betMove(d, r) ? ' ' + betMove(d, r) : ''}</span></a>`).join('')}
     ${hot ? `<p class="td-line"><b>${esc(hot.sector)}</b> is the hottest segment: ${plural(hot.n, 'live signal')}, ${money(hot.volume)} behind them.</p>` : '<p class="td-line">No prediction signals loaded.</p>'}
     ${tr && tr.movers && tr.movers.length ? `<p class="hint" style="margin:14px 0 4px">Odds that moved since yesterday</p>` + tr.movers.slice(0, 3).map(m => `<p class="td-line"><b class="${m.delta > 0 ? 'up' : 'down'}">${m.delta > 0 ? '+' : '−'}${Math.round(Math.abs(m.delta) * 100)} pts</b> ${esc(m.market)}</p>`).join('') : ''}
     <a class="more" href="#/overview" style="display:inline-block;margin-top:12px">Open Predictions →</a>`;

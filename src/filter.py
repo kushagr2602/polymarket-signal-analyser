@@ -8,7 +8,7 @@ from . import config, llm
 SPORTS_RE = re.compile(
     r"\b(vs\.?|spread:|o/u|moneyline|world cup|fifa|uefa|premier league|bundesliga|la liga|serie a|"
     r"nba|nfl|nhl|mlb|ncaa|ufc|boxing|f1|grand prix|motogp|olympi\w*|wimbledon|atp|wta|grand slam|"
-    r"map \d|odd/even total|first blood|kills\??)(?!\w)",
+    r"map \d|odd/even total|first blood|kills\??|up or down)(?!\w)",  # + short-term crypto coin flips
     re.IGNORECASE,
 )
 
@@ -28,7 +28,9 @@ Return JSON:
   "relevance_score": <0-10>,
   "sector": "<most relevant focus sector or null>",
   "affected_tickers": ["<ticker>", ...],
-  "reasoning": "<one paragraph: why this market matters or doesn't, what it implies for the watchlist>"
+  "reasoning": "<one paragraph: why this market matters or doesn't, what it implies for the watchlist>",
+  "impact": <0-10>,
+  "angle": "<one plain-English sentence for a beginner investor: if this resolves Yes, what moves and which way>"
 }}
 
 Score rubric:
@@ -39,6 +41,14 @@ Score rubric:
 3-4: Macro signal with broad implications (rates, recession, tariffs)
 1-2: Weak/indirect connection; demographic or social statistics with no tradable equity path
 0: Not relevant to any watchlist stock or focus sector
+
+Impact rubric (ignores the watchlist: how much would the outcome move financial markets?):
+9-10: Moves global markets — central-bank decisions, recession, war between major powers, sweeping tariffs
+7-8: Moves a whole sector, asset class or mega-cap — AI or crypto regulation, chip export controls,
+     a landmark antitrust ruling, an approval or ban that reshapes an industry
+5-6: Moves a single notable company or a niche asset
+1-4: Small or indirect market effect
+0: No market effect (politics trivia, culture, weather, personalities)
 
 Hard rules:
 - Sports, esports, celebrity, and entertainment outcomes are ALWAYS relevance_score 0 with no tickers.
@@ -55,6 +65,8 @@ def score_market(market: dict) -> dict:
             "sector": None,
             "affected_tickers": [],
             "reasoning": "Sports/entertainment market — outside the watchlist mandate.",
+            "impact": 0,
+            "angle": "",
         }
     allowed = set(config.get_watchlist()["tickers"])
     prompt = PROMPT.format(
@@ -77,6 +89,8 @@ def score_market(market: dict) -> dict:
         "sector": out.get("sector") or None,
         "affected_tickers": [t for t in (out.get("affected_tickers") or []) if t in allowed],
         "reasoning": out.get("reasoning", ""),
+        "impact": max(0, min(10, int(out.get("impact") or 0))),
+        "angle": out.get("angle") or "",
     }
 
 

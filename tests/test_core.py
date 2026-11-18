@@ -71,6 +71,18 @@ def test_sports_guard_leaves_finance_alone():
         assert not f.SPORTS_RE.search(q), q
 
 
+def test_big_bets_rank_by_impact_regardless_of_watchlist():
+    from src import views
+    sig = [{"market_id": i, "relevance_score": sc, "impact": im, "markets": {"question": q, "volume_usd": v, "probability": .05}}
+           for i, sc, im, q, v in [("a", 2, 8, "AI safety bill", 2e5), ("b", 9, 3, "NVDA earnings beat", 9e6),
+                                   ("c", 0, 9, "Fed cuts", 1e5), ("d", 4, 8, "Chip export ban", 5e6), ("e", 0, None, "old row", 1e9)]]
+    rows = views.to_rows(sig)
+    assert [r["id"] for r in views.big_bets(rows)] == ["c", "d", "a"]  # impact first, then money; low-impact / unscored out
+    rows[2]["prob"] = .005
+    assert [r["id"] for r in views.big_bets(rows)] == ["d", "a"]  # a near-settled market isn't a bet
+    assert set(views.snapshot(rows)["markets"]) == {"a", "b", "c", "d"}  # big bets get odds history even with low watchlist score
+
+
 def test_hot_topics_rank_by_conviction_and_money():
     from src import views
     r = lambda sec, score, vol, days=30, tk=("X",): dict(score=score, volume=vol, sector=sec, days=days,
