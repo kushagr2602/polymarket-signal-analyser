@@ -1,5 +1,6 @@
 """View-models: raw signal rows → what the dashboard renders. Pure functions, no I/O (unit-tested)."""
 import math
+import re
 from datetime import datetime, timedelta, timezone
 
 
@@ -30,12 +31,32 @@ def to_rows(sig: list[dict], now: datetime | None = None) -> list[dict]:
 
 
 BIG = 7  # impact at which a market counts as a big bet
+_FILLER = set("will the a an of by in on to for before after end its be is at x and or than more less vs with".split()) | {
+    m.lower() for m in "january february march april may june july august september october november december q1 q2 q3 q4".split()}
 
 
-def big_bets(rows: list[dict], n: int = 8) -> list[dict]:
-    """The most market-moving live bets, watchlist or not: highest impact, then most money behind them."""
-    live = (r for r in rows if r["impact"] >= BIG and r["prob"] is not None and .02 <= r["prob"] <= .98)  # settled odds aren't bets
-    return sorted(live, key=lambda r: (-r["impact"], -r["volume"]))[:n]
+def _gist(q: str) -> set[str]:
+    return {w for w in re.findall(r"[a-z][a-z.']+", q.lower()) if w not in _FILLER}
+
+
+def big_bets(rows: list[dict], n: int = 12) -> list[dict]:
+    """The most market-moving live bets, watchlist or not. Sectors take turns (best of each, then the next best)
+    so wars and the Fed don't crowd out an AI bill; within a sector, highest impact then most money.
+    One per story: 'invade Taiwan by June' and 'by December' share a gist, so only the bigger one shows."""
+    live = sorted((r for r in rows if r["impact"] >= BIG and r["prob"] is not None and .02 <= r["prob"] <= .98),  # settled odds aren't bets
+                  key=lambda r: (-r["impact"], -r["volume"]))
+    queues = {}
+    for r in live:
+        queues.setdefault(r["sector"], []).append(r)
+    out, seen = [], []
+    while len(out) < n and any(queues.values()):
+        for q in queues.values():
+            while q:
+                r = q.pop(0); g = _gist(r["market"])  # ponytail: word-overlap dedupe, store Polymarket event ids if it misfires
+                if all(len(g & p) / (len(g | p) or 1) < .5 for p in seen):
+                    out.append(r); seen.append(g)
+                    break
+    return out[:n]
 
 
 def kpis(rows: list[dict], n_markets: int) -> dict:

@@ -311,7 +311,7 @@ function betsHTML(d) {
     <span class="bet-p"><b>${r.prob == null ? '—' : Math.round(r.prob * 100) + '%'}</b><small>chance</small></span>
     <span class="bet-b"><span class="bet-q">${esc(r.market)}</span>
       ${r.angle ? `<span class="bet-a">${esc(r.angle)}</span>` : ''}
-      <span class="bet-m"><span class="bet-i${r.impact >= 9 ? ' hi' : ''}">${IMPACT_L(r.impact)}</span>${betMove(d, r)}<span>${money(r.volume)} bet</span>${r.days != null ? `<span>closes in ${plural(r.days, 'day')}</span>` : ''}${r.tickers.length ? `<span>${esc(r.tickers.join(' · '))}</span>` : ''}</span></span></a>`).join('')}</div>`;
+      <span class="bet-m"><span class="bet-i${r.impact >= 9 ? ' hi' : ''}">${IMPACT_L(r.impact)}</span>${betMove(d, r)}<span>${money(r.volume)} bet</span>${r.days != null ? `<span>closes in ${plural(r.days, 'day')}</span>` : ''}${r.tickers.length ? `<span>${esc(r.tickers.slice(0, 4).join(' · '))}${r.tickers.length > 4 ? ` +${r.tickers.length - 4}` : ''}</span>` : ''}</span></span></a>`).join('')}</div>`;
 }
 
 function moversHTML(t) {

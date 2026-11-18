@@ -78,8 +78,15 @@ def test_big_bets_rank_by_impact_regardless_of_watchlist():
                                    ("c", 0, 9, "Fed cuts", 1e5), ("d", 4, 8, "Chip export ban", 5e6), ("e", 0, None, "old row", 1e9)]]
     rows = views.to_rows(sig)
     assert [r["id"] for r in views.big_bets(rows)] == ["c", "d", "a"]  # impact first, then money; low-impact / unscored out
+    for r, sec in zip(rows, ["AI", "AI", "Macro", "Macro", "AI"]):
+        r["sector"] = sec
+    assert [r["id"] for r in views.big_bets(rows)] == ["c", "a", "d"]  # sectors take turns, so the AI bill isn't crowded out
     rows[2]["prob"] = .005
     assert [r["id"] for r in views.big_bets(rows)] == ["d", "a"]  # a near-settled market isn't a bet
+    dup = views.to_rows([{"market_id": i, "relevance_score": 0, "impact": 10, "markets": {"question": q, "volume_usd": v, "probability": .1}}
+                         for i, q, v in [("x", "Will China invade Taiwan by December 31, 2027?", 4e6),
+                                         ("y", "Will China invade Taiwan by June 30, 2027?", 6e5), ("z", "US recession by end of 2026?", 2e6)]])
+    assert [r["id"] for r in views.big_bets(dup)] == ["x", "z"]  # same story, different deadline → one card
     assert set(views.snapshot(rows)["markets"]) == {"a", "b", "c", "d"}  # big bets get odds history even with low watchlist score
 
 
